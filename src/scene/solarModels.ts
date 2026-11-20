@@ -10,7 +10,7 @@ import {
   getBodyDetailSpec,
   hasCustomShape,
   isProceduralDetailBody,
-  synthesizeBodyMapsSync,
+  type BodyDetailSpec,
   type SynthesizedMaps,
 } from './bodyDetail'
 import {
@@ -80,10 +80,50 @@ export function createSolarModels(
     }
     return geo
   }
-  const midSynthesisQueue: { id: string; mesh: T.Mesh }[] = []
+  const midSynthesisQueue: {
+    spec: BodyDetailSpec
+    includeSpecular: boolean
+    apply: (maps: SynthesizedMaps) => void
+  }[] = []
   const ownedMidMaps: SynthesizedMaps[] = []
   let cancelActiveMid: (() => void) | null = null
   let midQueueDisposed = false
+
+  function queueSharedMaps(spec: BodyDetailSpec, materials: T.MeshPhongMaterial[]) {
+    midSynthesisQueue.push({
+      spec,
+      includeSpecular: false,
+      apply(maps) {
+        for (const material of materials) {
+          material.map = maps.albedo
+          material.bumpMap = null
+          material.normalMap = maps.normal
+          material.needsUpdate = true
+        }
+      },
+    })
+  }
+
+  function queueBodyMaps(id: string, mesh: T.Mesh) {
+    const spec = getBodyDetailSpec(id)
+    const mat = mesh.material as T.MeshPhongMaterial
+    midSynthesisQueue.push({
+      spec,
+      includeSpecular: spec.baseGloss > 0.12 || (spec.iceGlossBoost ?? 0) > 0.2,
+      apply(maps) {
+        mat.userData.midMaps = maps
+        if (mat.userData.detailActive) return
+        mat.color.setHex(0xffffff)
+        mat.map = maps.albedo
+        mat.bumpMap = null
+        mat.normalMap = maps.normal
+        mat.normalScale.setScalar(spec.titanBands ? 0.25 : 0.92)
+        if (maps.specular) mat.specularMap = maps.specular
+        if (maps.emissive) mat.emissiveMap = maps.emissive
+        mat.needsUpdate = true
+      },
+    })
+  }
 
   const spaceTime = { value: 0 }
   const starPixelRatio = { value: 1 }
@@ -122,7 +162,7 @@ export function createSolarModels(
     const mesh = new T.Mesh(geometryFor(id, sphere), material)
     mesh.scale.set(r, r * polarRatio(id), r)
     if (needsProcMid) {
-      midSynthesisQueue.push({ id, mesh })
+      queueBodyMaps(id, mesh)
     }
     return mesh
   }
@@ -485,7 +525,6 @@ export function createSolarModels(
     setBeltsVisible,
     updateBeltVisibility,
     stepBelts,
-    disposeBelts,
   } = createAsteroidBelts(
     scene,
     webgl,
@@ -500,6 +539,8 @@ export function createSolarModels(
       neptuneA: planets[7].a,
     },
     textures.Rock,
+    textures.Icy,
+    queueSharedMaps,
   )
   function saturnRings(r: number) {
     const inner = r * ringInner,
@@ -563,12 +604,12 @@ export function createSolarModels(
     Triton: 'Icy',
     Titan: 'Haze',
   }
-  const minorRockMaps = webgl
-    ? synthesizeBodyMapsSync(getBodyDetailSpec('__minor_rock__', 'Jupiter'), 256, 128, 4)
-    : null
   const minorMaterial = webgl
-    ? createMinorMoonMaterial(minorRockMaps?.albedo ?? textures.Rock, minorRockMaps?.normal ?? null)
+    ? createMinorMoonMaterial(textures.Rock)
     : new T.MeshLambertMaterial({ color: 0xffffff, map: textures.Rock })
+  if (minorMaterial instanceof T.MeshPhongMaterial) {
+    queueSharedMaps(getBodyDetailSpec('__minor_rock__', 'Jupiter'), [minorMaterial])
+  }
   const minorGeo = buildMinorInstancedGeometry()
   minorGeo.computeBoundingSphere()
   const minorShape = minorGeo.boundingSphere!
@@ -584,6 +625,8 @@ export function createSolarModels(
     const mat = ringMesh.material
     if (mat instanceof T.MeshBasicMaterial && mat.map) ownedRingTextures.push(mat.map)
   }
+  const majorMoons: Moon[] = []
+  const minorGroups = new Map<World, { moons: Moon[]; lastClock: number }>()
   for (const p of worlds) {
     p.pos = v3()
     p.orbit = orbit(p.a, p.e, p.inc, p.node, p.peri || 0)
@@ -651,6 +694,7 @@ export function createSolarModels(
     const major = featured[p.id] || p.moons.map((m) => m.name)
     const minor = p.moons.filter((m) => !major.includes(m.name))
     if (minor.length) {
+      minorGroups.set(p, { moons: minor, lastClock: -Infinity })
       p.instances = new T.InstancedMesh(minorGeo, minorMaterial, minor.length)
       p.instances.boundingSphere = new T.Sphere(v3(), 0)
       p.instances.instanceMatrix.setUsage(T.DynamicDrawUsage)
@@ -698,6 +742,7 @@ export function createSolarModels(
       m.orbit = orbit(a, e, m.inc, m.node, m.w, m.frame === 'ecliptic' ? null : p.axis.quaternion)
       m.omega = tau / (18 * Math.pow(m.period || 0.475, 0.31))
       if (m.featured) {
+        majorMoons.push(m)
         const surface = moonSurfaces[m.name] || 'Rock'
         const color =
           surface === 'Rock' || surface === 'Icy' ? majorColors[m.name] || 0xe3e3e3 : 0xffffff
@@ -716,7 +761,7 @@ export function createSolarModels(
         }
         p.anchor.add(m.mesh)
         if (webgl && m.name !== 'Moon' && isProceduralDetailBody(m.name)) {
-          midSynthesisQueue.push({ id: m.name, mesh: m.mesh })
+          queueBodyMaps(m.name, m.mesh)
         }
       } else {
         m.instance = instance++
@@ -734,7 +779,7 @@ export function createSolarModels(
         m.spinRate = (0.08 + random() * 0.26) * (random() < 0.5 ? 1 : -1)
         m.quat = new T.Quaternion().setFromAxisAngle(m.spinAxis, m.spinPhase)
         const [br, bg, bb] = minorSpec.baseColor
-        // Normalize tint slightly upward since minorRockMaps already has mid-grey rock albedo
+        // The shared rock albedo is mid-grey.
         const lift = 1.48
         p.instances!.setColorAt(
           m.instance,
@@ -755,10 +800,8 @@ export function createSolarModels(
   function runMidQueue() {
     if (midQueueDisposed || midQueueIndex >= midSynthesisQueue.length) return
     const item = midSynthesisQueue[midQueueIndex++]
-    const spec = getBodyDetailSpec(item.id)
-    const mat = item.mesh.material as T.MeshPhongMaterial
-    cancelActiveMid = synthesis.run(spec, 256, 128, {
-      includeSpecular: spec.baseGloss > 0.12 || (spec.iceGlossBoost ?? 0) > 0.2,
+    cancelActiveMid = synthesis.run(item.spec, 256, 128, {
+      includeSpecular: item.includeSpecular,
       maxAnisotropy: 4,
       budgetMs: 5,
       onDone: (maps) => {
@@ -768,19 +811,8 @@ export function createSolarModels(
           return
         }
         ownedMidMaps.push(maps)
-        mat.userData.midMaps = maps
-        if (!mat.userData.detailActive) {
-          mat.color.setHex(0xffffff)
-          mat.map = maps.albedo
-          mat.bumpMap = null
-          mat.normalMap = maps.normal
-          const nScale = spec.titanBands ? 0.25 : 0.92
-          mat.normalScale.set(nScale, nScale)
-          if (maps.specular) mat.specularMap = maps.specular
-          if (maps.emissive) mat.emissiveMap = maps.emissive
-          mat.needsUpdate = true
-          requestDraw()
-        }
+        item.apply(maps)
+        requestDraw()
         runMidQueue()
       },
     })
@@ -832,11 +864,41 @@ export function createSolarModels(
     p.instances.setMatrixAt(m.instance, matrix)
   }
   function syncMinorInstance(m: Moon) {
-    if (m.instance === undefined || !m.parent.instances) return
+    if (!webgl || m.instance === undefined || !m.parent.instances) return
     writeMinorInstance(m.parent, m)
     m.parent.instances.instanceMatrix.needsUpdate = true
   }
-  function modelStep(clock: number) {
+  function updateMoonPosition(m: Moon, clock: number) {
+    orbitalPosition(m.orbit, m.phase + clock * m.omega, m.pos)
+    m.world.copy(m.pos).add(m.parent.pos)
+  }
+  function updateMinorMoons(host: World, clock: number) {
+    const group = minorGroups.get(host)
+    if (!group || group.lastClock === clock) return
+    for (const m of group.moons) {
+      updateMoonPosition(m, clock)
+      m.quat!.setFromAxisAngle(m.spinAxis!, m.spinPhase! + clock * m.spinRate!)
+      if (webgl) writeMinorInstance(host, m)
+    }
+    if (webgl) host.instances!.instanceMatrix.needsUpdate = true
+    group.lastClock = clock
+  }
+  const moonFrustum = new T.Frustum(),
+    moonClip = new T.Matrix4(),
+    moonBounds = new T.Sphere()
+  function updateVisibleMinorMoons(clock: number, camera: T.Camera, focus: World | null) {
+    moonFrustum.setFromProjectionMatrix(
+      moonClip.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+    )
+    for (const host of minorGroups.keys()) {
+      const instances = host.instances!
+      // The local bound encloses every orbital phase and spin, even after a long absence.
+      moonBounds.copy(instances.boundingSphere!).translate(host.pos)
+      instances.visible = host === focus || moonFrustum.intersectsSphere(moonBounds)
+      if (instances.visible) updateMinorMoons(host, clock)
+    }
+  }
+  function modelStep(clock: number, trackedMoon: Moon | null = null) {
     sun.mesh.rotation.y = clock * 0.045
     for (const [index, p] of worlds.entries()) {
       orbitalPosition(p.orbit, p.phase + (clock * tau) / (100 * (p.days / 365.26) ** 0.32), p.pos)
@@ -851,21 +913,13 @@ export function createSolarModels(
         if (earthShift) earthShift.value = (p.clouds.rotation.y - p.mesh.rotation.y) / tau
       }
       if (p.haze) p.haze.rotation.y = 1.15 + clock * 0.068
-      for (const m of p.moons) {
-        orbitalPosition(m.orbit, m.phase + clock * m.omega, m.pos)
-        m.world.copy(m.pos).add(p.pos)
-        if (m.mesh) {
-          m.mesh.position.copy(m.pos)
-          m.mesh.rotation.y = tidallyLockedMoons.has(m.name)
-            ? Math.atan2(m.pos.z, -m.pos.x)
-            : clock * 0.1
-        } else {
-          m.quat!.setFromAxisAngle(m.spinAxis!, m.spinPhase! + clock * m.spinRate!)
-          writeMinorInstance(p, m)
-        }
-      }
-      if (p.instances) p.instances.instanceMatrix.needsUpdate = true
     }
+    for (const m of majorMoons) {
+      updateMoonPosition(m, clock)
+      m.mesh!.position.copy(m.pos)
+      m.mesh!.rotation.y = tidallyLockedMoons.has(m.name) ? Math.atan2(m.pos.z, -m.pos.x) : clock * 0.1
+    }
+    if (trackedMoon?.instance !== undefined) updateMinorMoons(trackedMoon.parent, clock)
     const jupLon = Math.atan2(-planets[4].pos.z, planets[4].pos.x)
     const nepLon = Math.atan2(-planets[7].pos.z, planets[7].pos.x)
     stepBelts(clock, jupLon, nepLon)
@@ -875,8 +929,6 @@ export function createSolarModels(
     synthesis.dispose()
     cancelActiveMid?.()
     cancelActiveMid = null
-    minorRockMaps?.dispose()
-    disposeBelts()
     for (const tex of ownedRingTextures) tex.dispose()
     ownedRingTextures.length = 0
     for (const maps of ownedMidMaps) maps.dispose()
@@ -911,6 +963,8 @@ export function createSolarModels(
     planetDiscs,
     pathFor,
     modelStep,
+    updateMinorMoons,
+    updateVisibleMinorMoons,
     syncMinorInstance,
     disposeSolarExtras,
   }

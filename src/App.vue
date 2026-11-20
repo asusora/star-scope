@@ -26,6 +26,7 @@ import {
 } from './i18n'
 import { worldKind } from './i18n/catalogEn'
 import { localizedEntry } from './i18n/archiveLocale'
+import { trappistCatalog, trappistEntryId, trappistPlanets, trappistSecondsPerDay } from './data/trappist'
 
 const ui = createSceneUI(),
   atlas = shallowRef<Atlas | null>(null)
@@ -83,15 +84,29 @@ async function toggleFullscreen() {
 }
 
 const note = computed(() => ui.notes[ui.noteIndex])
+const inTrappist = computed(() => ui.deepEntry?.id === trappistEntryId)
+const trappistPlanet = computed(() => trappistPlanets.find((p) => p.key === ui.preset))
+function switchScale(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === 'trappist') atlas.value?.openTrappistSystem()
+  else if (value === 'galaxy') atlas.value?.openGalaxy()
+  else atlas.value?.openPlanet(null)
+}
 const currentSolarEntry = computed(() => {
   const a = atlas.value
   if (!a || ui.galaxy || ui.deepEntry || ui.region || !ui.planet) return null
   const id = ui.moon ? `${ui.planet.id}-${ui.moon.name}` : ui.planet.id
   return a.entries.find((e) => e.id === id) ?? null
 })
-const noteEntry = computed(() => ui.deepEntry ?? currentSolarEntry.value)
+const noteEntry = computed(() => inTrappist.value ? null : ui.deepEntry ?? currentSolarEntry.value)
 const noteEntryView = computed(() => (noteEntry.value ? localizedEntry(noteEntry.value) : null))
 const deepEntryView = computed(() => (ui.deepEntry ? localizedEntry(ui.deepEntry) : null))
+const observationTitle = computed(() => inTrappist.value ? ui.title : deepEntryView.value?.title ?? ui.title)
+const observationCode = computed(() => {
+  if (!inTrappist.value) return ui.deepEntry?.code
+  if (trappistPlanet.value) return pick('行星特写', 'Planet View')
+  return ui.preset === 'host' ? pick('母恒星', 'Host Star') : pick('七行星全景', 'Seven-Planet View')
+})
 
 const sourceName = computed(() => {
   const url = note.value?.source ?? ''
@@ -179,6 +194,7 @@ const totalMoons = computed(() => {
 })
 
 const hudModeTag = computed(() => {
+  if (inTrappist.value) return pick('系外行星轨道', 'Exoplanet Orbits')
   if (ui.deepEntry) return pick('深空三维观测', 'Deep-Sky 3D View')
   if (ui.galaxy) return pick('银河宏观尺度', 'Galactic Scale')
   if (ui.moon) return pick('卫星近距追踪', 'Moon Tracking')
@@ -191,6 +207,7 @@ const hudModeTag = computed(() => {
 })
 
 const hudCode = computed(() => {
+  if (inTrappist.value) return ''
   if (ui.deepEntry) return ui.deepEntry.code.split(' · ')[0]
   if (ui.galaxy) return 'MILKY WAY'
   if (ui.moon) return ui.moon.name.toUpperCase()
@@ -200,6 +217,7 @@ const hudCode = computed(() => {
 })
 
 const hudTelemetry = computed(() => {
+  if (inTrappist.value) return pick('超冷红矮星 · 7 颗行星', 'Ultracool red dwarf · 7 planets')
   if (ui.deepEntry) return groupLabel(ui.deepEntry.group)
   if (ui.galaxy) return pick('猎户支臂 · 距银心 2.6 万光年', 'Orion Spur · 26,000 ly from Center')
   if (ui.moon) {
@@ -252,8 +270,8 @@ const hudTelemetry = computed(() => {
         :aria-label="
           deepEntryView
             ? isEn
-              ? `${deepEntryView.title} 3D model. Drag to orbit, scroll to zoom.`
-              : deepEntryView.title + '三维示意，拖动旋转，滚轮缩放。'
+              ? `${observationTitle} 3D model. Drag to orbit, scroll to zoom.`
+              : observationTitle + '三维示意，拖动旋转，滚轮缩放。'
             : pick(
                 '交互式三维太阳系。方向键旋转，加减键缩放，Home 键复位。',
                 'Interactive 3D Solar System. Arrow keys to orbit, +/- to zoom, Home to reset.',
@@ -285,8 +303,8 @@ const hudTelemetry = computed(() => {
           <span class="hud-mode">{{ hudModeTag }}</span>
         </div>
         <div class="hud-title-row">
-          <strong class="hud-title">{{ deepEntryView ? deepEntryView.title : ui.title }}</strong>
-          <span class="hud-code">{{ hudCode }}</span>
+          <strong class="hud-title">{{ observationTitle }}</strong>
+          <span v-if="hudCode" class="hud-code">{{ hudCode }}</span>
         </div>
         <div class="hud-meta">
           <span class="hud-chip">{{ hudTelemetry }}</span>
@@ -303,6 +321,13 @@ const hudTelemetry = computed(() => {
       </header>
 
       <div class="sky-tools">
+        <select class="compact-scale" :aria-label="pick('观察尺度', 'View Scale')"
+          :value="inTrappist ? 'trappist' : ui.deepEntry ? 'deep' : ui.galaxy ? 'galaxy' : 'solar'" @change="switchScale">
+          <option v-if="ui.deepEntry && !inTrappist" disabled value="deep">{{ pick('深空', 'Deep Sky') }}</option>
+          <option value="solar">{{ pick('太阳系', 'Solar System') }}</option>
+          <option value="trappist">TRAPPIST-1</option>
+          <option value="galaxy">{{ pick('银河系', 'Milky Way') }}</option>
+        </select>
         <div class="scale-switch" role="group" :aria-label="pick('观察尺度', 'View Scale')">
           <button
             id="solarTab"
@@ -313,8 +338,12 @@ const hudTelemetry = computed(() => {
               <circle cx="8" cy="8" r="2.2" fill="currentColor" />
               <ellipse cx="8" cy="8" rx="6.5" ry="3.2" transform="rotate(-24 8 8)" stroke="currentColor" stroke-width="1.25" />
             </svg>
-            <span>{{ pick('太阳系', 'Solar') }}</span></button
-          ><button
+            <span>{{ pick('太阳系', 'Solar') }}</span>
+          </button>
+          <button id="trappistTab" :aria-pressed="inTrappist" @click="atlas?.openTrappistSystem()">
+            TRAPPIST-1
+          </button>
+          <button
             id="galaxyTab"
             :aria-pressed="!ui.deepEntry && ui.galaxy"
             @click="atlas?.openGalaxy()"
@@ -339,6 +368,8 @@ const hudTelemetry = computed(() => {
         </div>
         <button
           id="archiveOpen"
+          :aria-label="pick('星图档案', 'Archive')"
+          :title="pick('星图档案', 'Archive')"
           aria-haspopup="dialog"
           aria-controls="archive"
           @click="archive?.open()"
@@ -351,6 +382,8 @@ const hudTelemetry = computed(() => {
           <span>{{ pick('星图档案', 'Archive') }}</span></button
         ><button
           id="notes"
+          :aria-label="pick('注释', 'Notes')"
+          :title="pick('注释', 'Notes')"
           :aria-pressed="ui.notesOpen"
           aria-controls="noteCard"
           @click="atlas?.setNotes(!ui.notesOpen)"
@@ -416,28 +449,40 @@ const hudTelemetry = computed(() => {
         <div class="deep-caption">
           <span class="deep-dot" aria-hidden="true"></span>
           <span id="deepClass">{{ ui.deepClass }}</span><i></i
-          ><span id="deepCode">{{ ui.deepEntry?.code }}</span>
+          ><span id="deepCode">{{ observationCode }}</span>
         </div>
-        <h2 id="deepName">{{ deepEntryView?.title }}</h2>
+        <h2 id="deepName">{{ observationTitle }}</h2>
+        <p v-if="inTrappist" class="system-facts">
+          <template v-if="trappistPlanet">
+            {{ pick('周期', 'Period') }} {{ trappistPlanet.days.toFixed(3) }} {{ pick('天', 'd') }} ·
+            {{ pick('半长轴', 'Semi-major axis') }} {{ trappistPlanet.axisAU.toFixed(5) }} AU ·
+            {{ pick('倾角', 'Inclination') }} {{ trappistPlanet.inclination.toFixed(3) }}°
+          </template>
+          <template v-else>
+            {{ pick('公转周期 1.51–18.77 天', 'Orbital periods 1.51–18.77 d') }} ·
+            {{ pick(`标准速度下 ${trappistSecondsPerDay} 秒演示 1 天`, `1 simulated day per ${trappistSecondsPerDay} s at 1×`) }}
+          </template>
+        </p>
         <div class="deep-controls">
-          <div id="deepPresets" role="group" :aria-label="pick('观测视角', 'View Presets')">
+          <div id="deepPresets" :class="{ 'system-presets': inTrappist }" role="group" :aria-label="pick('观测视角', 'View Presets')">
             <button
               v-for="[mode, label] in ui.presets"
               :key="mode"
               :data-preset="mode"
+              :aria-label="inTrappist && mode.length === 1 ? 'TRAPPIST-1 ' + mode : label"
               :aria-pressed="ui.preset === mode"
               @click="atlas?.deepPreset(mode)"
             >
               {{ label }}
             </button>
           </div>
-          <button id="deepSource" @click="ui.deepEntry && archive?.open(ui.deepEntry)">
+          <button v-if="!inTrappist || ui.preset === 'e'" id="deepSource" @click="ui.deepEntry && archive?.open(ui.deepEntry)">
             <span>{{ pick('原图与资料', 'Photos & Info') }}</span>
             <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M4.5 9.5l5-5M5.5 4.5h4v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
-          <div class="deep-step">
+          <div v-if="!inTrappist || ui.preset === 'e'" class="deep-step">
             <button
               id="deepPrev"
               :aria-label="pick('上一个三维天体', 'Previous 3D target')"
@@ -457,6 +502,10 @@ const hudTelemetry = computed(() => {
             </button>
           </div>
         </div>
+        <p v-if="inTrappist" class="system-credit">
+          {{ pick('天体已放大，表面为艺术示意。', 'Bodies enlarged. Surfaces are illustrative.') }}
+          <a :href="trappistCatalog" target="_blank" rel="noopener">{{ pick('轨道资料 ↗', 'Orbit data ↗') }}</a>
+        </p>
       </section>
       <SurfaceHud
         v-if="atlas && ui.landing"

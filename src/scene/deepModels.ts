@@ -1,6 +1,7 @@
 import * as T from 'three'
-import { v3, tau, clamp, seeded } from './math'
-import { surfaceSources } from '../data/assets'
+import { v3, tau, rad, clamp, seeded, orbit, orbitPoint, type Orbit } from './math'
+import { sources, surfaceSources } from '../data/assets'
+import { trappistEpoch, trappistPlanets, trappistSecondsPerDay } from '../data/trappist'
 import {
   fieldVertex,
   fieldFragment,
@@ -48,14 +49,6 @@ export const planetarySystems: Record<string, PlanetSystem> = {
     axis: 11,
     radius: 1.48,
     rim: '#dda98f',
-  },
-  'trappist-1-e': {
-    host: 'TRAPPIST-1',
-    star: 'red',
-    days: 6.1,
-    axis: 9.5,
-    radius: 1.35,
-    rim: '#b3cbce',
   },
   '51-pegasi-b': {
     host: '飞马座 51',
@@ -249,7 +242,7 @@ export function createDeepModels(
       done()
       requestDraw()
     }
-    image.src = surfaceSources[key]
+    image.src = surfaceSources[key] ?? sources[key]
     return data
   }
   function glowMap(color: string): T.CanvasTexture {
@@ -325,14 +318,15 @@ export function createDeepModels(
     body.mesh.add(glow)
     return body
   }
-  function addOrbit(d: DeepModel, axis: number) {
+  function addOrbit(d: DeepModel, path: number | Orbit, color: string | number = 0xb6a990) {
+    const elements = typeof path === 'number' ? orbit(path, 0, 0, 0, 0) : path
     const points = Array.from({ length: 240 }, (_, i) =>
-      v3(Math.cos((tau * i) / 240) * axis, 0, Math.sin((tau * i) / 240) * axis),
+      orbitPoint(elements, (tau * i) / 240, v3()),
     )
     const line = new T.LineLoop(
       new T.BufferGeometry().setFromPoints(points),
       new T.LineBasicMaterial({
-        color: 0xb6a990,
+        color,
         transparent: true,
         opacity: 0.39,
         depthWrite: false,
@@ -560,6 +554,17 @@ export function createDeepModels(
     const hostLabel = pick(def.host, exoHostEn[id] ?? def.host)
     const host = addStar(d, 'host', hostLabel, 2.45, def.star)
     d.scene.add(new T.AmbientLight(0xc7d4fa, 0.22), new T.PointLight(0xfff0d7, 2.9, 0, 0))
+    addExoplanet(d, host, 'main', localizedEntry(d.entry).title, def)
+    addOrbit(d, def.axis)
+  }
+  function addExoplanet(
+    d: DeepModel,
+    host: DeepBody,
+    key: string,
+    name: string,
+    def: Pick<PlanetSystem, 'radius' | 'rim'>,
+  ) {
+    const id = d.entry.id
     const surface = getSurface(id),
       gas = ['51-pegasi-b', 'hd-209458-b'].includes(id),
       lava = id === '55-cancri-e',
@@ -635,7 +640,7 @@ export function createDeepModels(
     }
     mat.customProgramCacheKey = () => 'exoplanet-surface-v2'
 
-    const planet = addSphere(d, 'main', localizedEntry(d.entry).title, def.radius, mat, surface, null)
+    const planet = addSphere(d, key, name, def.radius, mat, surface, null)
     const exoSphere = new T.SphereGeometry(1, 128, 84)
     planet.mesh.geometry = exoSphere
     if (gas) planet.mesh.scale.y *= 0.945
@@ -688,7 +693,47 @@ export function createDeepModels(
       planet.mesh.userData.tailPivot = tailPivot
     }
 
-    addOrbit(d, def.axis)
+    return planet
+  }
+  function makeTrappistSystem(d: DeepModel) {
+    const host = addStar(d, 'host', 'TRAPPIST-1', 1.55, 'red')
+    d.scene.add(new T.AmbientLight(0xd7dcf1, 0.65), new T.PointLight(0xffecd6, 3.1, 0, 0))
+    d.planetOrbits = trappistPlanets.map((p) => {
+      const name = 'TRAPPIST-1 ' + p.key
+      const radius = p.radiusEarth * 0.61
+      let body: DeepBody
+      if (p.key === 'e') {
+        body = addExoplanet(d, host, p.key, name, { radius, rim: p.tint })
+      } else {
+        const surface = getSurface(p.surface)
+        const material = new T.MeshPhongMaterial({
+          map: surface.texture,
+          bumpMap: surface.texture,
+          bumpScale: 0.014,
+          color: p.tint,
+          shininess: 5,
+        })
+        body = addSphere(d, p.key, name, radius, material, surface, null)
+      }
+      body.tag.textContent = p.key
+      const e = Math.hypot(p.eCosW, p.eSinW)
+      const peri = Math.atan2(p.eSinW, p.eCosW)
+      // Display the nearly edge-on system in its own plane, assuming a common node.
+      const elements = orbit(p.axisAU * 500, e, p.inclination - 90, 0, peri / rad)
+      addOrbit(d, elements, p.tint)
+      // Agol's NbodyGradient fit places inferior conjunction at true longitude 270°.
+      const halfAnomaly = (1.5 * Math.PI - peri) / 2
+      const E = 2 * Math.atan2(
+        Math.sqrt(1 - e) * Math.sin(halfAnomaly),
+        Math.sqrt(1 + e) * Math.cos(halfAnomaly),
+      )
+      return {
+        body,
+        orbit: elements,
+        meanAtEpoch: E - e * Math.sin(E) + tau * (trappistEpoch - p.transit) / p.days,
+        radiansPerSecond: tau / (p.days * trappistSecondsPerDay),
+      }
+    })
   }
   function refreshLabels(d: DeepModel, lang: Locale) {
     const id = d.entry.id
@@ -699,7 +744,7 @@ export function createDeepModels(
       else if (b.key === 'main') next = id === 'sirius' ? pick('天狼星 A', 'Sirius A', lang) : title
       else if (b.key === 'companion' && id === 'sirius') next = pick('天狼星 B', 'Sirius B', lang)
       b.name = next
-      b.tag.textContent = next
+      b.tag.textContent = d.planetOrbits && b.key !== 'host' ? b.key : next
     }
     for (const [key, , el] of d.landmarks) {
       el.textContent = lang === 'en' ? deepLandmarkEn[key] ?? key : key
@@ -714,5 +759,5 @@ export function createDeepModels(
     surfaceCache.clear()
     glowMaps.clear()
   }
-  return { makeGalaxy, makePlanetSystem, makeStarSystem, refreshLabels, getSurface, glowMap, dispose }
+  return { makeGalaxy, makePlanetSystem, makeTrappistSystem, makeStarSystem, refreshLabels, getSurface, glowMap, dispose }
 }

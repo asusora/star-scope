@@ -1,7 +1,7 @@
 import * as T from 'three'
 import { createBeltInstances, rockStride } from './beltInstances'
 import { seeded, tau } from './math'
-import { getBodyDetailSpec, synthesizeBodyMapsSync, type SynthesizedMaps } from './bodyDetail'
+import { getBodyDetailSpec, type BodyDetailSpec } from './bodyDetail'
 
 export interface BandRange {
   inner: number
@@ -162,7 +162,6 @@ function buildAsteroidPrototype(spec: AsteroidPrototypeSpec): T.SphereGeometry {
  */
 function createBeltRockMaterial(
   map: T.Texture | null,
-  normalMap: T.Texture | null,
   clockUniform: { value: number },
   angleOffsetUniform: { value: number },
   icy: boolean,
@@ -171,17 +170,13 @@ function createBeltRockMaterial(
   const material = new T.MeshPhongMaterial({
     color: 0xffffff,
     map,
-    normalMap,
+    bumpMap: map,
+    bumpScale: 0.045,
     vertexColors: true,
     specular: icy ? 0x2a3a4a : 0x0d0b0a,
     shininess: icy ? 24 : 9,
   })
-  if (normalMap) {
-    material.normalScale.set(icy ? 0.95 : 1.18, icy ? 0.95 : 1.18)
-  } else if (map) {
-    material.bumpMap = map
-    material.bumpScale = 0.045
-  }
+  material.normalScale.setScalar(icy ? 0.95 : 1.18)
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uBeltClock = clockUniform
@@ -554,6 +549,8 @@ export function createAsteroidBelts(
   webgl: boolean,
   layout: BeltLayout,
   fallbackRockTex: T.Texture | null,
+  fallbackIceTex: T.Texture | null,
+  queueSharedMaps: (spec: BodyDetailSpec, materials: T.MeshPhongMaterial[]) => void,
 ) {
   const { mainBand, hildaBand, centaurBands, outerBand, scatteredBand, oortBand, jupiterA, neptuneA } =
     layout
@@ -593,10 +590,20 @@ export function createAsteroidBelts(
     }),
   ]
 
-  let rockyMaps: SynthesizedMaps | null = null
-  let icyMaps: SynthesizedMaps | null = null
+  const mainRockMat = createBeltRockMaterial(
+    fallbackRockTex, clockUniform, zeroAngle, false, 'belt-rock-instanced-v2',
+  )
+  const jupLockedRockMat = createBeltRockMaterial(
+    fallbackRockTex, clockUniform, jupiterAngle, false, 'belt-rock-juplocked-v2',
+  )
+  const kuiperRockMat = createBeltRockMaterial(
+    fallbackIceTex, clockUniform, zeroAngle, true, 'kuiper-rock-instanced-v2',
+  )
+  const nepLockedRockMat = createBeltRockMaterial(
+    fallbackIceTex, clockUniform, neptuneAngle, true, 'kuiper-rock-neplocked-v2',
+  )
   if (webgl) {
-    rockyMaps = synthesizeBodyMapsSync(
+    queueSharedMaps(
       {
         ...getBodyDetailSpec('Vesta'),
         baseColor: [0.68, 0.66, 0.64],
@@ -606,11 +613,9 @@ export function createAsteroidBelts(
         normalStrength: 2.0,
         baseImageMix: 0,
       },
-      256,
-      128,
-      4,
+      [mainRockMat, jupLockedRockMat],
     )
-    icyMaps = synthesizeBodyMapsSync(
+    queueSharedMaps(
       {
         ...getBodyDetailSpec('Namaka'),
         baseColor: [0.76, 0.79, 0.83],
@@ -620,44 +625,9 @@ export function createAsteroidBelts(
         normalStrength: 1.75,
         baseImageMix: 0,
       },
-      256,
-      128,
-      4,
+      [kuiperRockMat, nepLockedRockMat],
     )
   }
-
-  const mainRockMat = createBeltRockMaterial(
-    rockyMaps?.albedo ?? fallbackRockTex,
-    rockyMaps?.normal ?? null,
-    clockUniform,
-    zeroAngle,
-    false,
-    'belt-rock-instanced-v2',
-  )
-  const jupLockedRockMat = createBeltRockMaterial(
-    rockyMaps?.albedo ?? fallbackRockTex,
-    rockyMaps?.normal ?? null,
-    clockUniform,
-    jupiterAngle,
-    false,
-    'belt-rock-juplocked-v2',
-  )
-  const kuiperRockMat = createBeltRockMaterial(
-    icyMaps?.albedo ?? fallbackRockTex,
-    icyMaps?.normal ?? null,
-    clockUniform,
-    zeroAngle,
-    true,
-    'kuiper-rock-instanced-v2',
-  )
-  const nepLockedRockMat = createBeltRockMaterial(
-    icyMaps?.albedo ?? fallbackRockTex,
-    icyMaps?.normal ?? null,
-    clockUniform,
-    neptuneAngle,
-    true,
-    'kuiper-rock-neplocked-v2',
-  )
 
   const mainMid = (mainBand.inner + mainBand.outer) * 0.5
 
@@ -1101,10 +1071,6 @@ export function createAsteroidBelts(
         trojans.dustPoints.rotation.y = jupLon
         neptuneTrojans.dustPoints.rotation.y = nepLon
       }
-    },
-    disposeBelts() {
-      rockyMaps?.dispose()
-      icyMaps?.dispose()
     },
   }
 }

@@ -19,10 +19,11 @@ import { createSolarModels } from './solarModels'
 import { createTextureUploads } from './textureUploads'
 import { createLabels } from './labels'
 import { createArchive, jplFacts, moonSources } from '../data/archive'
+import { trappistEntryId, trappistPaper } from '../data/trappist'
 import { createDeepModels, galaxyForms, planetarySystems } from './deepModels'
 import { createDeepCanvasRenderer } from './deepCanvas'
 import type { DeepModel } from './deepTypes'
-import { rad, tau, v3, seeded, clamp } from './math'
+import { rad, tau, v3, seeded, clamp, orbitalPosition } from './math'
 import {
   Moon,
   World,
@@ -160,6 +161,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     planetDiscs,
     pathFor,
     modelStep,
+    updateMinorMoons,
+    updateVisibleMinorMoons,
     syncMinorInstance,
     disposeSolarExtras,
   } = createSolarModels(scene, !!renderer, textures, solarSystem, tag, requestDraw)
@@ -886,6 +889,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function getNotes(lang: Locale = locale.value): Note[] {
     if (deepTarget) {
+      if (deepTarget.planetOrbits) return [{
+        name: pick('TRAPPIST-1 的七条轨道', 'The seven orbits of TRAPPIST-1', lang),
+        body: pick(
+          '七颗行星的轨道间距与公转周期按比例呈现，起始位置来自 Agol 等人（2021）的凌星拟合。模型采用固定的开普勒轨道和共同的升交点方向。天体尺寸已放大，表面为艺术示意。',
+          'Orbit spacing and periods are proportional. Starting positions use the transit fit of Agol et al. (2021). The model uses fixed Keplerian orbits and a common node. Bodies are enlarged and surfaces are illustrative.',
+          lang,
+        ),
+        source: trappistPaper,
+      }]
       const view = localizedEntry(deepTarget.entry, lang)
       return [
         {
@@ -1128,8 +1140,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     for (const p of worlds) {
       if (!p.anchor.visible) continue
       entry(p.pos, p.r, p.id)
-      for (const m of p.moons)
-        entry(m.world, m.r, m.name, m.featured ? '#cdbb9f' : '#83959e')
+      for (const m of p.moons) {
+        if (m.featured || p.instances?.visible)
+          entry(m.world, m.r, m.name, m.featured ? '#cdbb9f' : '#83959e')
+      }
     }
     entries.sort((a, b) => b.q.z - a.q.z)
     for (const { q, r, key, tint } of entries) {
@@ -1232,6 +1246,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       return
     }
     moveCamera(now)
+    if (!galaxyView) updateVisibleMinorMoons(clock, camera, focusPlanet)
     updateSmallBodyDetail()
     updateSurfaceDetail()
     updateOrbitMasks()
@@ -1275,6 +1290,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         .addScaledVector(direction, distance * ((radius * 1.16) / distance) ** easing)
       camera.quaternion.slerpQuaternions(rotation, pointing, Math.min(1, t * 3))
       camera.updateMatrixWorld()
+      updateVisibleMinorMoons(clock, camera, focusPlanet)
       skyDome.position.copy(camera.position)
       stars.position.copy(camera.position)
       shootingStars.position.copy(camera.position)
@@ -1346,7 +1362,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       clock += delta * speed
       if (!deepTarget) {
         if (galaxyView) galaxy.rotation.y -= delta * speed * 0.009
-        else modelStep(clock)
+        else modelStep(clock, focusMoon)
       }
     }
     if (zoomTarget !== null) {
@@ -1363,7 +1379,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       }
       dirty = true
     }
-    const activeMotion = playing || dirty || !!transition || fadingPaths.size > 0
+    const fadingSolarOrbits = !deepTarget && fadingPaths.size > 0
+    const activeMotion = playing || dirty || !!transition || fadingSolarOrbits
     if (activeMotion) {
       dirty = false
       lastAmbientDraw = now
@@ -1377,7 +1394,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     const keepLoop =
       playing ||
       !!transition ||
-      fadingPaths.size > 0 ||
+      fadingSolarOrbits ||
       zoomTarget !== null ||
       (!!renderer && !orbitMotion.matches)
     if (!frame && keepLoop) frame = requestAnimationFrame(tick)
@@ -1728,7 +1745,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function setOrbitMode(mode: OrbitMode) {
     orbitMode = ui.orbitMode = mode
-    updateOrbitTargets()
+    if (!deepTarget) updateOrbitTargets()
     requestDraw()
   }
   function setLabels(value: boolean) {
@@ -1791,6 +1808,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function openMoon(m: Moon) {
     if (focusPlanet !== m.parent || galaxyView) openPlanet(m.parent)
+    if (m.instance !== undefined) updateMinorMoons(m.parent, clock)
     focusPlanet = m.parent
     focusMoon = m
     focusRegion = null
@@ -1850,6 +1868,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       narrow = Math.max(1, 1.18 / camera.aspect)
     if (d.form) return (d.entry.id === 'm87' ? 46 : 38) * narrow
     if (d.view === 'system') {
+      if (d.planetOrbits) {
+        const outer = Math.max(...d.planetOrbits.map((track) => track.orbit.a))
+        return outer * Math.max(2.55, 2.85 / camera.aspect)
+      }
       if (d.system) return (d.system.axis + 3.9) * 2.45 * narrow
       return (d.entry.id === 'vega' ? 31.5 : 29) * narrow
     }
@@ -1861,10 +1883,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       const elevation = d.view === 'top' ? 1.5 : d.view === 'edge' ? 0.075 : d.form.pitch
       return [0, elevation]
     }
-    if (d.system && d.view === 'main') {
-      const p = deepBody('main')!.pos
+    if ((d.system && d.view === 'main') || (d.planetOrbits && !['system', 'host'].includes(d.view))) {
+      const p = deepBody(d.view)!.pos
       return [Math.atan2(-p.x, -p.z) + 0.93, 0.24]
     }
+    if (d.planetOrbits && d.view === 'system') return [0.59, 0.61]
     return [d.entry.id === 'vega' ? 0.31 : 0.59, d.view === 'system' ? 0.46 : 0.2]
   }
   function deepLimits(): [number, number] {
@@ -1880,15 +1903,19 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       d.root.rotation.y = t * 0.008
       return
     }
-    for (const b of d.bodies)
+    for (const b of d.bodies) {
       b.mesh.rotation.y = 0.8 + t * (b.look ? 0.051 : d.system ? 0.082 : 0.05)
-    if (d.system) {
+      const clouds = b.mesh.userData.clouds as T.Mesh | undefined
+      if (clouds) clouds.rotation.y = t * 0.032
+    }
+    if (d.planetOrbits) {
+      for (const track of d.planetOrbits)
+        orbitalPosition(track.orbit, track.meanAtEpoch + t * track.radiansPerSecond, track.body.pos)
+    } else if (d.system) {
       const a = 0.54 + (t * tau) / (18 + Math.log10(d.system.days + 1) * 11),
         r = d.system.axis
       const main = deepBody('main')!
       main.pos.set(r * Math.cos(a), 0, r * Math.sin(a))
-      const clouds = main.mesh.userData.clouds as T.Mesh | undefined
-      if (clouds) clouds.rotation.y = t * 0.032
       const tailPivot = main.mesh.userData.tailPivot as T.Group | undefined
       if (tailPivot) {
         tailPivot.position.copy(main.pos)
@@ -1967,6 +1994,19 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function refreshDeepControls(lang: Locale = locale.value) {
     const d = deepTarget!
+    if (d.planetOrbits) {
+      ui.presets = [
+        ['system', pick('全景', 'Overview', lang)],
+        ['host', pick('母星', 'Star', lang)],
+        ...d.planetOrbits.map(({ body }) => [body.key, body.key]),
+      ]
+      ui.preset = d.view
+      ui.tracksDisabled = false
+      ui.deepClass = pick('行星系统', 'Planetary system', lang)
+      ui.title = deepBody(d.view)?.name ?? 'TRAPPIST-1'
+      return
+    }
+    ui.title = lang === 'en' ? `${localizedEntry(d.entry, lang).title} · 3D View` : d.entry.title + '三维观测'
     const modes = d.form
       ? [
           ['oblique', pick('斜视', 'Oblique', lang)],
@@ -2011,11 +2051,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     aim()
     requestDraw()
   }
-  function openDeepTarget(entry: ArchiveEntry) {
+  function openDeepTarget(entry: ArchiveEntry, trappistView: 'e' | 'system' = 'e') {
     setDock(false)
     drawer(false)
     setNotes(false)
     if (deepTarget?.entry === entry) {
+      if (deepTarget.planetOrbits) deepPreset(trappistView)
       canvas.focus({ preventScroll: true })
       return
     }
@@ -2049,7 +2090,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       d.sky.rotation.copy(skyDome.rotation)
       d.scene.add(d.sky)
     }
-    if (form) models.makeGalaxy(d)
+    if (entry.id === trappistEntryId) {
+      models.makeTrappistSystem(d)
+      d.view = trappistView
+    } else if (form) models.makeGalaxy(d)
     else if (system) models.makePlanetSystem(d)
     else models.makeStarSystem(d)
 
@@ -2059,10 +2103,6 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     hoverPoint = null
     canvas.title = ''
     ui.deepEntry = entry
-    ui.title =
-      locale.value === 'en'
-        ? `${localizedEntry(entry, 'en').title} · 3D View`
-        : entry.title + '三维观测'
     advanceDeepModel()
     updateProjection()
     refreshDeepControls()
@@ -2078,7 +2118,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     deepTarget = null
     ui.deepEntry = null
 
-    if (!galaxyView) modelStep(clock)
+    if (!galaxyView) modelStep(clock, focusMoon)
     if (restore) {
       updateView()
       ui.group = '太阳系'
@@ -2179,10 +2219,6 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (deepTarget) {
       models.refreshLabels(deepTarget, lang)
       refreshDeepControls(lang)
-      ui.title =
-        lang === 'en'
-          ? `${localizedEntry(deepTarget.entry, 'en').title} · 3D View`
-          : deepTarget.entry.title + '三维观测'
     } else {
       ui.title = galaxyView
         ? pick('银河系', 'Milky Way', lang)
@@ -2222,6 +2258,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     openRegion,
     openGalaxy,
     openDeepTarget,
+    openTrappistSystem: () => openDeepTarget(catalogEntries.find((entry) => entry.id === trappistEntryId)!, 'system'),
     deepPreset,
     switchDeepTarget,
     goBack: () => (deepTarget ? leaveDeepTarget(true) : openPlanet(focusMoon ? focusPlanet : null)),

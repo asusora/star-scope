@@ -1,5 +1,6 @@
 import type * as T from 'three'
 import type { ArchiveEntry, OrbitPath } from './types'
+import type { Orbit } from './math'
 
 export interface GalaxyForm {
   seed: number
@@ -53,6 +54,7 @@ export interface DeepModel {
   entry: ArchiveEntry
   form?: GalaxyForm
   system?: PlanetSystem
+  planetOrbits?: { body: DeepBody; orbit: Orbit; meanAtEpoch: number; radiansPerSecond: number }[]
   view: string
   start: number
   origin: T.Vector3

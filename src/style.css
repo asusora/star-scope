@@ -183,7 +183,7 @@ button:disabled {
   top: max(16px, env(safe-area-inset-top));
   left: max(18px, env(safe-area-inset-left));
   pointer-events: none;
-  max-width: min(390px, calc(100vw - 440px));
+  max-width: min(390px, calc(100vw - 665px));
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -362,6 +362,10 @@ button:disabled {
 }
 
 /* Top-Right Scale Switch */
+.compact-scale {
+  display: none;
+}
+
 .scale-switch {
   gap: 3px;
   padding: 3px;
@@ -1698,6 +1702,36 @@ dialog a:hover {
   flex-wrap: wrap;
 }
 
+.system-facts,
+.system-credit {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.system-credit {
+  margin: 8px 0 0;
+  font-size: 11px;
+}
+
+.system-credit a {
+  color: var(--cyan-bright);
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+#deepPresets.system-presets {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#deepPresets.system-presets button {
+  min-width: 28px;
+  padding-inline: 7px;
+}
+
 .deep-controls button {
   display: inline-flex;
   align-items: center;
@@ -2402,8 +2436,18 @@ dialog h3 {
 
 /* Responsive Breakpoints */
 @media (max-width: 960px) {
+  .sky-tools #archiveOpen span,
+  .sky-tools #notes span,
+  .scale-switch .ui-ico {
+    display: none;
+  }
+  .sky-tools #archiveOpen,
+  .sky-tools #notes {
+    width: 32px;
+    justify-content: center;
+  }
   #hudBrand {
-    max-width: min(280px, calc(100vw - 360px));
+    max-width: min(280px, calc(100vw - 520px));
   }
   .hud-meta {
     display: none;
@@ -2417,7 +2461,7 @@ dialog h3 {
   #hudBrand {
     top: max(12px, env(safe-area-inset-top));
     left: 12px;
-    max-width: calc(100vw - 260px);
+    max-width: calc(100vw - 460px);
   }
   .hud-kicker {
     display: none;
@@ -2463,6 +2507,9 @@ dialog h3 {
   .sky-tools {
     top: max(10px, env(safe-area-inset-top));
     gap: 5px;
+  }
+  .scale-switch button {
+    padding-inline: 7px;
   }
   .stage-actions {
     top: 52px;
@@ -2625,6 +2672,40 @@ dialog h3 {
     bottom: 62px;
     left: 10px;
     width: min(300px, calc(100% - 20px));
+  }
+}
+
+@media (max-width: 430px) {
+  .sky-tools {
+    right: 4px;
+    left: 4px;
+    justify-content: center;
+    gap: 2px;
+  }
+  .scale-switch button {
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 385px) {
+  .sky-tools {
+    justify-content: space-between;
+    gap: 4px;
+  }
+  .sky-tools .scale-switch {
+    display: none;
+  }
+  .compact-scale {
+    display: block;
+    min-height: 32px;
+    padding-inline: 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--glass);
+    color: var(--cyan-bright);
+    font: 500 12px var(--sans);
+    color-scheme: dark;
   }
 }
 

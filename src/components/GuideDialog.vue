@@ -30,7 +30,8 @@ defineExpose({ open: () => dialog.value?.showModal() })
         target.
       </p>
       <p>
-        Switch between the Solar System and the Milky Way at top right. Open “Notes” for curated
+        Switch between the Solar System, TRAPPIST-1 and the Milky Way at top right.
+        In TRAPPIST-1, select b through h to follow a planet and read its orbital parameters. Open “Notes” for curated
         astronomy commentary, and click scene pins to switch topics. Clicking the Solar System
         marker in the Milky Way zooms back to planetary orbits.
       </p>
@@ -194,7 +195,7 @@ defineExpose({ open: () => dialog.value?.showModal() })
         加拖动平移。滚轮向指针所指的区域缩放；触屏上双指捏合缩放、双指同向拖动平移。复位键可回到当前目标。
       </p>
       <p>
-        从右上角切换太阳系与银河系。点“注释”查看当前视图的天文说明，点图中的标记可切换讲解。银河系中的太阳系标记可带你回到行星轨道。
+        从右上角切换太阳系、TRAPPIST-1 与银河系。在 TRAPPIST-1 全景中点选 b 至 h，可跟随对应行星并查看轨道参数。点“注释”查看当前视图的天文说明，点图中的标记可切换讲解。银河系中的太阳系标记可带你回到行星轨道。
       </p>
       <p>
         展开「天体导航」并点选天体，即可进入它的三维视图。拖动环绕，滚动或双指缩放。星系可切换俯视、侧视；系外行星可切换特写和系统全景。「原图与资料」保留观测影像、艺术想象图与来源。

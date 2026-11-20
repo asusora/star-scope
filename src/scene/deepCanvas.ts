@@ -212,6 +212,9 @@ export function createDeepCanvasRenderer(
           b.key === 'main' && d.entry.id === '55-cancri-e'
             ? getSurface('lava-emission').pixels
             : null
+      const tint = b.mesh.material instanceof T.MeshPhongMaterial
+        ? b.mesh.material.color.clone().convertLinearToSRGB().toArray()
+        : [1, 1, 1]
       const cos = Math.cos(b.mesh.rotation.y),
         sin = Math.sin(b.mesh.rotation.y),
         out = b.rasterData.data
@@ -250,7 +253,7 @@ export function createDeepCanvasRenderer(
             const rim = (1 - nz) ** 3 * (0.08 + 0.39 * Math.max(0, sunward))
             for (let k = 0; k < 3; k++)
               out[i + k] =
-                (pixels ? pixels.data[j + k] : 120) * lit +
+                (pixels ? pixels.data[j + k] : 120) * lit * tint[k] +
                 rim * atmo[k] +
                 (emission ? emission.data[j + k] * 1.15 : 0)
           }
@@ -291,7 +294,8 @@ export function createDeepCanvasRenderer(
       if (!orbit.visible) continue
       const points = orbit.geometry.attributes.position
       ctx.beginPath()
-      ctx.strokeStyle = '#b6a99062'
+      ctx.strokeStyle = orbit.material.color.getStyle()
+      ctx.globalAlpha = orbit.material.opacity
       let prev = false
       for (let i = 0; i <= points.count; i++) {
         const q = project(pos.fromBufferAttribute(points, i % points.count))
@@ -302,6 +306,7 @@ export function createDeepCanvasRenderer(
         prev = !!q
       }
       ctx.stroke()
+      ctx.globalAlpha = 1
     }
     if (d.form) drawSoftwareVolume(d)
     const bodies = d.bodies

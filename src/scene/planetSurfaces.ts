@@ -1312,8 +1312,8 @@ export function createMinorMoonMaterial(
     specular: 0x080809,
     shininess: 8,
   })
-  if (normalMap) material.normalScale.set(1.05, 1.05)
-  else if (map) {
+  material.normalScale.setScalar(1.05)
+  if (!normalMap && map) {
     material.bumpMap = map
     material.bumpScale = 0.042
   }

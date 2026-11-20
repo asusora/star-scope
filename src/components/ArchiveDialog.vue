@@ -16,6 +16,7 @@ const tabs: readonly ArchiveTab[] = ['全部', ...deepGroups, '太阳系', '探�
 const group = ref<ArchiveTab>(deepGroups[0]),
   query = ref(''),
   observing = ref(false),
+  openedEntry = shallowRef<ArchiveEntry | null>(null),
   current = shallowRef<ArchiveEntry | null>(null),
   mediaMode = ref<'probe' | 'model'>('probe'),
   probeIndex = ref(0)
@@ -35,7 +36,7 @@ const items = computed(() => {
     if (needle) {
       return archiveSearchTokens(e).some((s) => s && normalized(s).includes(needle))
     }
-    return group.value === '探测器实拍' || !e.moon || e.featured || !!e.probePhotos?.length
+    return e === openedEntry.value || !e.moon || e.featured || !!e.probePhotos?.length
   })
 })
 
@@ -57,7 +58,8 @@ watch(current, (entry) => {
   if (detail.value) detail.value.scrollTop = 0
 })
 
-function filter(tab: ArchiveTab) {
+function filter(tab: ArchiveTab, entry: ArchiveEntry | null = null) {
+  openedEntry.value = entry
   group.value = tab
   query.value = ''
 }
@@ -94,7 +96,7 @@ async function open(
   const targetTab: ArchiveTab =
     options?.tab ??
     (entry ? (entry.probePhotos?.length ? '探测器实拍' : entry.group) : deepGroups[0])
-  filter(targetTab)
+  filter(targetTab, entry)
   current.value = entry ?? items.value[0] ?? null
   probeIndex.value = 0
   mediaMode.value = current.value?.probePhotos?.length ? 'probe' : 'model'
