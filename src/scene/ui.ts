@@ -1,9 +1,10 @@
 import { shallowReactive } from 'vue'
 import type { SceneUI } from './types'
+import { pick } from '../i18n'
 
 export function createSceneUI() {
   return shallowReactive<SceneUI>({
-    title: '太阳系',
+    title: pick('太阳系', 'Solar System'),
     landing: null,
     galaxy: false,
     planet: null,

@@ -2,6 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, useTemplateRef } from 'vue'
 import type { Atlas } from '../scene/atlas'
 import type { SurfaceStatus } from '../scene/types'
+import { isEn, pick } from '../i18n'
 
 const { atlas, status } = defineProps<{ atlas: Atlas; status: SurfaceStatus }>()
 const emit = defineEmits<{ exit: [] }>()
@@ -9,16 +10,21 @@ const hud = useTemplateRef('hud')
 const keys = new Set<string>(),
   holds = new Map<number, string>()
 const accepted = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']
-const moves = [
-  ['KeyW', 'up', '向前'],
-  ['KeyA', 'left', '向左'],
-  ['KeyS', 'down', '向后'],
-  ['KeyD', 'right', '向右'],
-] as const
-const compass = computed(
+const moves = computed(
   () =>
-    ['北', '东北', '东', '东南', '南', '西南', '西', '西北'][Math.round(status.bearing / 45) % 8],
+    [
+      ['KeyW', 'up', pick('向前', 'Forward')],
+      ['KeyA', 'left', pick('向左', 'Left')],
+      ['KeyS', 'down', pick('向后', 'Backward')],
+      ['KeyD', 'right', pick('向右', 'Right')],
+    ] as const,
 )
+const compass = computed(() => {
+  const dirs = isEn.value
+    ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    : ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
+  return dirs[Math.round(status.bearing / 45) % 8]
+})
 function drive() {
   const values = new Set([...keys, ...holds.values()])
   const axis = (positive: string, negative: string) =>
@@ -108,7 +114,11 @@ onBeforeUnmount(() => {
     id="surfaceHUD"
     ref="hud"
     tabindex="-1"
-    :aria-label="status.name + (status.cloud ? '云层观测' : '地表漫游')"
+    :aria-label="
+      isEn
+        ? `${status.name} ${status.cloud ? 'Cloud Flight' : 'Surface Excursion'}`
+        : status.name + (status.cloud ? '云层观测' : '地表漫游')
+    "
     @keydown="key($event, true)"
     @keyup="key($event, false)"
     @focusout="focusOut"
@@ -124,7 +134,7 @@ onBeforeUnmount(() => {
     ></div>
     <div class="surface-veil" :style="{ opacity: status.veil }"></div>
     <div class="visor-frame" aria-hidden="true"></div>
-    <div class="surface-compass" aria-label="朝向">
+    <div class="surface-compass" :aria-label="pick('朝向', 'Heading')">
       <span class="compass-rule"></span>
       <span class="compass-value">
         <span class="compass-dir">{{ compass }}</span>
@@ -142,32 +152,49 @@ onBeforeUnmount(() => {
           stroke-linejoin="round"
         />
       </svg>
-      <span>返回轨道</span>
+      <span>{{ pick('返回轨道', 'Return to Orbit') }}</span>
     </button>
     <div class="surface-readout">
       <div class="surface-mode">
         <i :class="{ descending: status.descending }"></i>
         <span role="status">{{
-          status.descending ? '正在下降' : status.cloud ? '云层巡航' : '地表漫游'
+          status.descending
+            ? pick('正在下降', 'DESCENDING')
+            : status.cloud
+              ? pick('云层巡航', 'CLOUD FLIGHT')
+              : pick('地表漫游', 'SURFACE EVA')
         }}</span>
         <span class="surface-separator">//</span>
-        <span>{{ status.region }} · 模拟</span>
+        <span>{{ status.region }} · {{ pick('模拟', 'SIM') }}</span>
       </div>
       <h2>{{ status.name }}</h2>
       <div class="surface-metrics">
         <span class="metric-pill">
-          <em>{{ status.cloud ? '距云顶' : '离地高度' }}</em>
+          <em>{{
+            status.cloud ? pick('距云顶', 'Above Clouds') : pick('离地高度', 'Altitude')
+          }}</em>
           <b>{{ status.altitude }} m</b>
         </span>
         <span class="metric-pill">
-          <em>距{{ status.cloud ? '起点' : '着陆点' }}</em>
+          <em>{{
+            status.cloud ? pick('距起点', 'From Origin') : pick('距着陆点', 'From LZ')
+          }}</em>
           <b>{{ status.distance }} m</b>
         </span>
       </div>
-      <p class="desktop-hint">WASD 移动 · 拖动或方向键环顾 · ESC 返回</p>
-      <p class="touch-hint">按住方向键移动 · 拖动画面环顾</p>
+      <p class="desktop-hint">
+        {{
+          pick(
+            'WASD 移动 · 拖动或方向键环顾 · ESC 返回',
+            'WASD to move · Drag or arrows to look · ESC to orbit',
+          )
+        }}
+      </p>
+      <p class="touch-hint">
+        {{ pick('按住方向键移动 · 拖动画面环顾', 'Hold arrows to move · Drag to look around') }}
+      </p>
     </div>
-    <div class="surface-pad" role="group" aria-label="移动方向">
+    <div class="surface-pad" role="group" :aria-label="pick('移动方向', 'Movement controls')">
       <button
         v-for="[code, dir, label] in moves"
         :key="code"

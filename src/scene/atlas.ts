@@ -1,6 +1,16 @@
 import * as T from 'three'
-import { landscape } from './landing/landscape'
+import { landscape, landscapeRegion, type Landscape } from './landing/landscape'
 import { createExcursion } from './landing/excursion'
+import { formatNum, groupLabel, locale, pick, regionLabel, type Locale } from '../i18n'
+import {
+  galaxyNotesEn,
+  moonLabel,
+  moonNumberName,
+  solarNotesEn,
+  worldName,
+  worldSummary,
+} from '../i18n/catalogEn'
+import { localizedEntry } from '../i18n/archiveLocale'
 import { sources, thumbs } from '../data/assets'
 import { createSolarSystem } from '../data/solar'
 import { createPlanetDetail, type PlanetBody } from './planetDetail'
@@ -67,7 +77,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     console.info('Using the Canvas perspective renderer.', error)
   }
   const softwareContext = renderer ? null : canvas.getContext('2d')
-  if (!renderer && !softwareContext) throw new Error('浏览器无法创建绘图上下文。')
+  if (!renderer && !softwareContext)
+    throw new Error(
+      pick('浏览器无法创建绘图上下文。', 'This browser cannot create a graphics context.'),
+    )
   const ctx = softwareContext!
   const textures: Record<string, T.Texture | null> = {}
   const images: Record<string, HTMLImageElement> = {}
@@ -247,7 +260,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       if (prevMinor) syncMinorInstance(prevMinor)
       if (next?.minorMoon) syncMinorInstance(next.minorMoon)
     }
-    detail.syncProxy()
+    detail.update(clock)
   }
   function updateOrbitMasks() {
     if (!renderer) return
@@ -638,10 +651,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         const r = q.scale * m.r
         pickables.push({ obj: m, q, r })
         if (m === focusMoon) {
-          if (selectedTag.textContent !== m.label) selectedTag.textContent = m.label
+          const text = moonLabel(m)
+          if (selectedTag.textContent !== text) selectedTag.textContent = text
           markers.unshift({ el: selectedTag, q, r })
         } else if (p === focusPlanet && !focusMoon && m.featured) {
-          if (!m.tag) m.tag = tag(m.label)
+          const text = moonLabel(m)
+          if (!m.tag) m.tag = tag(text)
+          else if (m.tag.textContent !== text) m.tag.textContent = text
           if (!m.tag.isConnected) tags.append(m.tag)
           markers.push({ el: m.tag, q, r })
         }
@@ -777,17 +793,20 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   const solarMarker = document.createElement('button')
   solarMarker.className = 'galaxy-marker'
   solarMarker.hidden = true
-  solarMarker.textContent = '太阳系 ↗'
-  solarMarker.setAttribute('aria-label', '太阳系在银河系中的位置，点击进入太阳系')
+  function syncSolarMarker(lang: Locale = locale.value) {
+    solarMarker.textContent = pick('太阳系 ↗', 'Solar System ↗', lang)
+    solarMarker.setAttribute(
+      'aria-label',
+      pick(
+        '太阳系在银河系中的位置，点击进入太阳系',
+        'Solar System location in the Milky Way, click to enter',
+        lang,
+      ),
+    )
+  }
+  syncSolarMarker()
   pins.append(solarMarker)
   solarMarker.onclick = () => openPlanet(null)
-  const regionLabels: Record<Belt, string> = {
-    main: '主小行星带',
-    trojan: '木星特洛伊群',
-    centaur: '半人马小天体带',
-    outer: '柯伊伯带',
-    scattered: '离散盘与内奥尔特云',
-  }
   const solarNotes: (Note & { region: Belt })[] = [
     {
       name: '离散盘与内奥尔特云',
@@ -849,41 +868,95 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     noteIndex = 0,
     currentNotes: Note[] = [],
     pinNodes: HTMLButtonElement[] = []
-  function getNotes(): Note[] {
-    if (deepTarget)
+  function localizedSolarNotes(lang: Locale): (Note & { region: Belt })[] {
+    if (lang === 'zh') return solarNotes
+    return solarNotes.map((n) => ({
+      ...n,
+      name: solarNotesEn[n.region].name,
+      body: solarNotesEn[n.region].body,
+    }))
+  }
+  function localizedGalaxyNotes(lang: Locale): Note[] {
+    if (lang === 'zh') return galaxyNotes
+    return galaxyNotes.map((n, i) => ({
+      ...n,
+      name: galaxyNotesEn[i]?.name ?? n.name,
+      body: galaxyNotesEn[i]?.body ?? n.body,
+    }))
+  }
+  function getNotes(lang: Locale = locale.value): Note[] {
+    if (deepTarget) {
+      const view = localizedEntry(deepTarget.entry, lang)
       return [
         {
-          name: deepTarget.entry.title,
-          body: deepTarget.entry.body,
+          name: view.title,
+          body: view.body,
           source: deepTarget.entry.source,
         },
       ]
-    if (galaxyView) return galaxyNotes
-    if (focusRegion) {
-      const matched = solarNotes.find((n) => n.region === focusRegion)
-      return matched ? [matched] : [solarNotes[0]]
     }
-    if (!focusPlanet) return solarNotes
+    if (galaxyView) return localizedGalaxyNotes(lang)
+    const sNotes = localizedSolarNotes(lang)
+    if (focusRegion) {
+      const matched = sNotes.find((n) => n.region === focusRegion)
+      return matched ? [matched] : [sNotes[0]]
+    }
+    if (!focusPlanet) return sNotes
     const m = focusMoon,
       p = focusPlanet
     if (m) {
-      const axis = m.a.toLocaleString('zh-CN')
-      const orbit = m.estimate
-        ? '发现时，它距土星中心约 ' + axis + ' 千米。图中的绕行采用圆轨道近似。'
-        : '它绕' +
-          p.name +
-          '运行，轨道半长轴约为 ' +
-          axis +
-          ' 千米，公转一周约需 ' +
-          m.period +
-          ' 个地球日。'
+      const axis = formatNum(m.a, lang)
+      const pName = worldName(p, lang)
+      const mLabel = moonLabel(m, lang)
+      const mNum = moonNumberName(m, lang)
+      const orbit =
+        lang === 'en'
+          ? m.estimate
+            ? `At discovery, it was observed ~${axis} km from Saturn’s center. Its motion here uses a circular approximation.`
+            : `Orbits ${pName} with a semi-major axis of ~${axis} km and an orbital period of ${m.period ? m.period + ' Earth days' : 'an unlisted duration'}.`
+          : m.estimate
+            ? '发现时，它距土星中心约 ' + axis + ' 千米。图中的绕行采用圆轨道近似。'
+            : '它绕' +
+              p.name +
+              '运行，轨道半长轴约为 ' +
+              axis +
+              ' 千米，公转一周约需 ' +
+              m.period +
+              ' 个地球日。'
       const source = moonSources[p.id] || jplFacts
       return [
         {
-          name: [m.label, m.numberName].filter(Boolean).join(' · '),
+          name: [mLabel, mNum].filter(Boolean).join(' · '),
           p: m.world,
           body: orbit,
           source: m.estimate ? 'https://tamkin3.eps.harvard.edu/iauc/09000/09091.html' : source,
+        },
+      ]
+    }
+    const pName = worldName(p, lang)
+    const summary = worldSummary(p, lang)
+    if (lang === 'en') {
+      const moonsText = p.moons.length
+        ? `This atlas includes ${p.moons.length} known natural satellite${p.moons.length === 1 ? '' : 's'}. Open the Moons drawer to track any orbit.`
+        : 'No known natural satellites.'
+      const periodText =
+        p.days > 3652
+          ? (p.days / 365.25).toFixed(p.days > 36525 ? 0 : 1) + ' Earth years'
+          : formatNum(Math.round(p.days), 'en') + ' Earth days'
+      const auText = p.au
+        ? p.periAU && p.apoAU && Math.abs(p.apoAU - p.periAU) > 1
+          ? `Semi-major axis ~${p.au.toFixed(p.au >= 100 ? 0 : 1)} AU (perihelion ${p.periAU.toFixed(1)} AU, aphelion ${p.apoAU.toFixed(p.apoAU >= 100 ? 0 : 1)} AU), `
+          : `Semi-major axis ~${p.au.toFixed(2)} AU, `
+        : ''
+      const orbitSentence = auText
+        ? `${auText}orbital period ~${periodText}.`
+        : `Orbital period ~${periodText}.`
+      return [
+        {
+          name: pName,
+          p: p.pos,
+          body: `${summary ? summary + ' ' : ''}${orbitSentence} ${moonsText}`,
+          source: p.source || 'https://ssd.jpl.nasa.gov/planets/phys_par.html',
         },
       ]
     }
@@ -1178,12 +1251,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   let excursion: ReturnType<typeof createExcursion> | null = null
   let approach: ((t: number) => void) | null = null
   let enteredAt = 0
+  let landingSite: { site: Landscape; world: World; moon: Moon | null } | null = null
   function land() {
     if (excursion || deepTarget || galaxyView || focusRegion) return
     zoomTarget = null
     const world = focusPlanet ?? planets.find((p) => p.id === 'Mars')!
     const id = focusMoon?.name ?? world.id,
-      name = focusMoon?.label ?? world.name
+      name = focusMoon ? moonLabel(focusMoon) : worldName(world)
     const center = (focusMoon?.world ?? world.pos).clone(),
       radius = focusMoon?.r ?? world.r
     const start = camera.position.clone(),
@@ -1216,8 +1290,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     setDock(false)
     drawer(false)
     if (notesOpen) setNotes(false)
+    const site = landscape(id, name)
+    landingSite = { site, world, moon: focusMoon }
     excursion = createExcursion(
-      landscape(id, name),
+      site,
       renderer,
       softwareContext,
       orbitMotion.matches,
@@ -1232,6 +1308,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (!excursion) return
     excursion.dispose()
     excursion = null
+    landingSite = null
     approach = null
     if (transition) transition.t += performance.now() - enteredAt
     ui.landing = null
@@ -1516,10 +1593,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
             region = object || deepTarget ? null : beltAt(x, y)
           const caption = object
             ? object instanceof Moon
-              ? object.label
-              : object.name
+              ? moonLabel(object)
+              : object instanceof World
+                ? worldName(object)
+                : object.name
             : region
-              ? regionLabels[region.id]
+              ? regionLabel(region.id)
               : ''
           canvas.style.cursor = caption ? 'pointer' : ''
           if (canvas.title !== caption) canvas.title = caption
@@ -1679,10 +1758,14 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     ui.region = focusRegion
     ui.deepEntry = null
     ui.title = galaxyView
-      ? '银河系'
-      : focusMoon?.label ||
-        focusPlanet?.name ||
-        (focusRegion ? regionLabels[focusRegion] : '太阳系')
+      ? pick('银河系', 'Milky Way')
+      : focusMoon
+        ? moonLabel(focusMoon)
+        : focusPlanet
+          ? worldName(focusPlanet)
+          : focusRegion
+            ? regionLabel(focusRegion)
+            : pick('太阳系', 'Solar System')
     ui.tracksDisabled = galaxyView
     refreshNotes()
     syncPaths()
@@ -1882,35 +1965,41 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     placeLabels([], width, height)
     if (d.sky) d.sky.material.dispose()
   }
-  function refreshDeepControls() {
+  function refreshDeepControls(lang: Locale = locale.value) {
     const d = deepTarget!
     const modes = d.form
       ? [
-          ['oblique', '斜视'],
-          ['top', '俯视'],
-          ['edge', '侧视'],
+          ['oblique', pick('斜视', 'Oblique', lang)],
+          ['top', pick('俯视', 'Face-On', lang)],
+          ['edge', pick('侧视', 'Edge-On', lang)],
         ]
       : d.system
         ? [
-            ['main', '行星特写'],
-            ['system', '系统全景'],
+            ['main', pick('行星特写', 'Planet View', lang)],
+            ['system', pick('系统全景', 'System View', lang)],
           ]
         : d.entry.id === 'sirius'
           ? [
-              ['system', '双星全景'],
-              ['main', '天狼星 A'],
-              ['companion', '天狼星 B'],
+              ['system', pick('双星全景', 'Binary View', lang)],
+              ['main', pick('天狼星 A', 'Sirius A', lang)],
+              ['companion', pick('天狼星 B', 'Sirius B', lang)],
             ]
           : d.entry.id === 'vega'
             ? [
-                ['main', '恒星特写'],
-                ['system', '尘埃盘'],
+                ['main', pick('恒星特写', 'Star View', lang)],
+                ['system', pick('尘埃盘', 'Debris Disk', lang)],
               ]
             : []
     ui.presets = modes
     ui.preset = d.view
     ui.deepClass =
-      d.entry.group + ' · ' + (d.form ? '形态示意' : d.system ? '外观示意' : '结构示意')
+      groupLabel(d.entry.group, lang) +
+      ' · ' +
+      (d.form
+        ? pick('形态示意', '3D Morphology', lang)
+        : d.system
+          ? pick('外观示意', 'Concept Model', lang)
+          : pick('结构示意', '3D Structure', lang))
     ui.tracksDisabled = !d.orbits.length
   }
   function deepPreset(mode: string) {
@@ -1970,7 +2059,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     hoverPoint = null
     canvas.title = ''
     ui.deepEntry = entry
-    ui.title = entry.title + '三维观测'
+    ui.title =
+      locale.value === 'en'
+        ? `${localizedEntry(entry, 'en').title} · 3D View`
+        : entry.title + '三维观测'
     advanceDeepModel()
     updateProjection()
     refreshDeepControls()
@@ -2073,10 +2165,54 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     tags.replaceChildren()
     pins.replaceChildren()
   }
+  function setLocale(lang: Locale) {
+    sun.name = pick('太阳', 'Sun', lang)
+    sun.tag.textContent = sun.name
+    for (const p of worlds) {
+      p.tag.textContent = worldName(p, lang)
+      for (const m of p.moons) {
+        if (m.tag) m.tag.textContent = moonLabel(m, lang)
+      }
+    }
+    if (focusMoon) selectedTag.textContent = moonLabel(focusMoon, lang)
+    syncSolarMarker(lang)
+    if (deepTarget) {
+      models.refreshLabels(deepTarget, lang)
+      refreshDeepControls(lang)
+      ui.title =
+        lang === 'en'
+          ? `${localizedEntry(deepTarget.entry, 'en').title} · 3D View`
+          : deepTarget.entry.title + '三维观测'
+    } else {
+      ui.title = galaxyView
+        ? pick('银河系', 'Milky Way', lang)
+        : focusMoon
+          ? moonLabel(focusMoon, lang)
+          : focusPlanet
+            ? worldName(focusPlanet, lang)
+            : focusRegion
+              ? regionLabel(focusRegion, lang)
+              : pick('太阳系', 'Solar System', lang)
+    }
+    if (excursion && landingSite) {
+      const nextName = landingSite.moon
+        ? moonLabel(landingSite.moon, lang)
+        : worldName(landingSite.world, lang)
+      const nextRegion = landscapeRegion(landingSite.site.id, landingSite.site.kind, lang)
+      excursion.status.name = nextName
+      excursion.status.region = nextRegion
+      ui.landing = { ...excursion.status }
+    }
+    const prevIdx = noteIndex
+    refreshNotes()
+    if (notesOpen && currentNotes.length) showNote(Math.min(prevIdx, currentNotes.length - 1))
+    requestDraw()
+  }
   return {
     planets,
     smallBodies,
     entries: catalogEntries,
+    setLocale,
     land,
     takeOff,
     surfaceLook: (dx: number, dy: number) => excursion?.look(dx, dy),

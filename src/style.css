@@ -426,6 +426,17 @@ button:disabled {
   justify-content: center;
 }
 
+.sky-tools > .lang-btn {
+  min-width: 38px;
+  padding: 0 10px;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cyan-bright);
+}
+
 .sky-tools > button:hover,
 .stage-actions button:hover {
   color: #ffffff;
@@ -465,7 +476,8 @@ button:disabled {
     0 0 22px rgba(255, 184, 92, 0.28);
 }
 
-.stage-actions button span#count {
+.stage-actions button span#count,
+.stage-actions button .probe-count {
   font-family: var(--mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -474,6 +486,17 @@ button:disabled {
   border-radius: 6px;
   background: rgba(70, 217, 255, 0.14);
   border: 1px solid rgba(70, 217, 255, 0.24);
+}
+
+.stage-actions #bodyArchive.has-probe {
+  color: var(--cyan-bright);
+  border-color: rgba(70, 217, 255, 0.42);
+  background: linear-gradient(135deg, rgba(30, 134, 206, 0.24), rgba(10, 24, 46, 0.8));
+}
+
+.stage-actions #bodyArchive.has-probe:hover {
+  border-color: rgba(114, 224, 255, 0.72);
+  background: linear-gradient(135deg, rgba(40, 158, 232, 0.34), rgba(14, 34, 62, 0.88));
 }
 
 /* Vertical Right-Edge Camera Control Rail (Zero overlap with bottom dock!) */
@@ -1385,6 +1408,27 @@ dialog::before {
   font: 500 11.5px var(--mono);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
+  text-align: right;
+}
+
+.detail-archive-btn {
+  margin-top: 9px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(70, 217, 255, 0.34);
+  background: rgba(20, 62, 102, 0.34);
+  color: var(--cyan-bright);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-align: center;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.detail-archive-btn:hover {
+  border-color: rgba(114, 224, 255, 0.65);
+  background: rgba(34, 96, 152, 0.45);
+  color: #ffffff;
 }
 
 /* Scene Interactive Pins & Galaxy Marker */
@@ -1474,6 +1518,30 @@ dialog::before {
   color: #f3f9ff;
 }
 
+.note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.note-pill {
+  display: inline-flex;
+  align-items: center;
+  font: 500 11px / 1.2 var(--mono);
+  color: var(--ink-soft);
+  padding: 3px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(114, 206, 255, 0.2);
+  background: rgba(8, 20, 38, 0.72);
+}
+
+.note-pill.is-probe {
+  color: var(--amber-bright);
+  border-color: rgba(255, 184, 92, 0.36);
+  background: rgba(66, 38, 12, 0.56);
+}
+
 #noteText {
   margin: 9px 0 13px;
   font-size: 13px;
@@ -1481,7 +1549,15 @@ dialog::before {
   color: var(--ink-soft);
 }
 
+.note-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .note-foot a,
+.note-archive,
 .sources a,
 dialog a {
   color: var(--cyan-bright);
@@ -1491,22 +1567,37 @@ dialog a {
 }
 
 .note-foot a:hover,
+.note-archive:hover,
 .sources a:hover,
 dialog a:hover {
   color: #ffffff;
 }
 
-.note-foot a {
+.note-foot a,
+.note-archive {
   text-decoration: none;
   padding: 4px 10px;
   border-radius: 8px;
   border: 1px solid rgba(70, 217, 255, 0.22);
   background: rgba(70, 217, 255, 0.08);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.note-foot a:hover {
+.note-foot a:hover,
+.note-archive:hover {
   border-color: rgba(70, 217, 255, 0.55);
   background: rgba(70, 217, 255, 0.16);
+}
+
+.note-archive {
+  color: var(--amber-bright);
+  border-color: rgba(255, 184, 92, 0.35);
+  background: rgba(255, 174, 72, 0.12);
+}
+
+.note-archive:hover {
+  border-color: rgba(255, 204, 120, 0.72);
+  background: rgba(255, 174, 72, 0.22);
 }
 
 #notePages {
@@ -1553,7 +1644,7 @@ dialog a:hover {
   z-index: 3;
   left: clamp(20px, 3vw, 48px);
   bottom: clamp(22px, 3.8vh, 44px);
-  max-width: calc(100% - 92px);
+  max-width: min(460px, calc(50vw - 92px));
   text-shadow: 0 2px 18px rgba(3, 8, 18, 0.9);
   pointer-events: none;
 }
@@ -1761,6 +1852,9 @@ dialog h3 {
 }
 
 #archiveTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 500;
   padding: 6px 13px;
@@ -1769,6 +1863,16 @@ dialog h3 {
   background: rgba(8, 17, 32, 0.6);
   color: var(--muted);
   transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+
+#archiveTabs .tab-count {
+  font: 500 10.5px / 1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--amber-bright);
+  background: rgba(255, 184, 92, 0.14);
+  border: 1px solid rgba(255, 184, 92, 0.3);
 }
 
 #archiveTabs button:hover {
@@ -1784,7 +1888,7 @@ dialog h3 {
 
 .archive-layout {
   display: grid;
-  grid-template-columns: minmax(180px, 0.84fr) minmax(0, 2fr);
+  grid-template-columns: minmax(190px, 0.86fr) minmax(0, 2fr);
   gap: 20px;
   min-height: 240px;
   max-height: 58dvh;
@@ -1816,6 +1920,24 @@ dialog h3 {
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 
+.archive-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.probe-badge {
+  flex-shrink: 0;
+  font-style: normal;
+  font: 500 10px / 1.1 var(--mono);
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--amber-bright);
+  border: 1px solid rgba(255, 184, 92, 0.35);
+  background: rgba(255, 174, 72, 0.13);
+}
+
 #archiveList button:hover {
   background: rgba(70, 217, 255, 0.08);
   border-color: rgba(70, 217, 255, 0.16);
@@ -1840,6 +1962,93 @@ dialog h3 {
   padding: 0 6px 6px 0;
 }
 
+.archive-visual {
+  margin-bottom: 14px;
+}
+
+.visual-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.media-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(5, 11, 22, 0.82);
+}
+
+.media-switch button {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 7px;
+  color: var(--muted);
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.media-switch button:hover {
+  color: var(--ink);
+}
+
+.media-switch button[aria-pressed='true'] {
+  color: var(--amber-bright);
+  background: linear-gradient(135deg, rgba(255, 174, 72, 0.24), rgba(62, 36, 12, 0.68));
+  box-shadow: inset 0 0 0 1px rgba(255, 196, 112, 0.42);
+}
+
+.media-switch button:last-child[aria-pressed='true'] {
+  color: var(--cyan-bright);
+  background: linear-gradient(135deg, rgba(36, 152, 220, 0.26), rgba(14, 40, 74, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(102, 224, 255, 0.38);
+}
+
+.visual-expand {
+  font-size: 11.5px;
+  color: var(--cyan-bright);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(70, 217, 255, 0.26);
+  background: rgba(14, 34, 60, 0.56);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.visual-expand:hover {
+  border-color: rgba(114, 224, 255, 0.6);
+  background: rgba(24, 62, 104, 0.66);
+  color: #ffffff;
+}
+
+.media-pill {
+  display: inline-flex;
+  align-items: center;
+  font: 600 10.5px / 1.2 var(--mono);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.media-pill.is-probe {
+  color: var(--amber-bright);
+  border: 1px solid rgba(255, 184, 92, 0.44);
+  background: rgba(255, 174, 72, 0.16);
+}
+
+.media-pill.is-model {
+  color: #a9c6df;
+  border: 1px solid rgba(114, 206, 255, 0.24);
+  background: rgba(20, 42, 72, 0.48);
+}
+
 #archiveDetail figure {
   margin: 0 0 12px;
 }
@@ -1852,6 +2061,153 @@ dialog h3 {
   border-radius: 12px;
   border: 1px solid var(--line);
   background: #040812;
+}
+
+#archiveDetail .probe-figure {
+  margin: 0;
+}
+
+#archiveDetail .probe-stage {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 184, 92, 0.28);
+  background: radial-gradient(circle at 50% 45%, rgba(16, 28, 50, 0.45), #030710 78%);
+  overflow: hidden;
+}
+
+#archiveDetail .probe-stage.zoomable {
+  cursor: zoom-in;
+}
+
+#archiveDetail .probe-stage img {
+  width: 100%;
+  height: clamp(170px, 27vh, 280px);
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.probe-switcher {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.probe-switcher button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(6, 14, 28, 0.72);
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.probe-switcher button:hover {
+  border-color: var(--line-strong);
+  background: rgba(14, 30, 54, 0.78);
+}
+
+.probe-switcher button[aria-pressed='true'] {
+  border-color: rgba(255, 192, 108, 0.62);
+  background: linear-gradient(135deg, rgba(255, 174, 72, 0.18), rgba(14, 26, 46, 0.84));
+}
+
+#archiveDetail .probe-switcher img {
+  width: 44px;
+  height: 36px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(114, 206, 255, 0.18);
+  background: #030710;
+}
+
+.probe-switcher span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.probe-switcher b {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.probe-switcher small {
+  font: 10px var(--mono);
+  color: var(--muted);
+}
+
+#archiveDetail .probe-meta {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 184, 92, 0.22);
+  background: rgba(6, 13, 25, 0.78);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.probe-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.probe-title-row strong {
+  color: #f4faff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#archiveDetail .probe-desc {
+  margin: 6px 0 8px;
+  font-size: 12px;
+  line-height: 1.62;
+  color: var(--ink-soft);
+}
+
+.probe-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(114, 206, 255, 0.14);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.probe-facts span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.probe-facts b {
+  color: #9ec0dc;
+  font-weight: 500;
+  min-width: 52px;
+}
+
+:lang(en) .probe-facts b {
+  min-width: 74px;
+}
+
+.probe-facts a {
+  margin-left: 4px;
+  font-size: 11.5px;
 }
 
 #archiveDetail .solar-portrait img {
@@ -1901,6 +2257,7 @@ dialog h3 {
 
 #archiveDetail dt {
   color: var(--muted);
+  white-space: nowrap;
 }
 
 #archiveDetail dd {
@@ -1989,11 +2346,19 @@ dialog h3 {
 
 #archive.observing #archiveDetail {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(200px, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1.55fr) minmax(240px, 1fr);
+  align-items: start;
   gap: 24px;
   padding: 0;
   overflow: visible;
+}
+
+#archive.observing #archiveDetail.no-visual {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+#archive.observing .archive-visual {
+  margin: 0;
 }
 
 #archive.observing figure {
@@ -2005,6 +2370,20 @@ dialog h3 {
   width: 100%;
   object-fit: contain;
   background: #030710;
+}
+
+#archive.observing .probe-stage img {
+  height: clamp(220px, 44vh, 430px);
+}
+
+#archive.observing .probe-switcher img {
+  width: 44px;
+  height: 36px;
+  object-fit: cover;
+}
+
+#archive.observing .solar-portrait img {
+  height: clamp(180px, 34vh, 300px);
 }
 
 #archive.observing h3 {
@@ -2087,6 +2466,9 @@ dialog h3 {
   }
   .stage-actions {
     top: 52px;
+    max-width: calc(100vw - 20px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
   #drawer {
     right: 10px;
@@ -2162,14 +2544,26 @@ dialog h3 {
   #archiveDetail img {
     height: 16vh;
   }
+  #archiveDetail .probe-stage img {
+    height: clamp(150px, 24vh, 220px);
+  }
+  #archiveDetail .probe-switcher img {
+    width: 40px;
+    height: 32px;
+  }
   #archive.observing {
     width: calc(100vw - 16px);
   }
   #archive.observing #archiveDetail {
     display: block;
   }
-  #archive.observing figure img {
-    height: clamp(140px, 32dvh, 270px);
+  #archive.observing figure img,
+  #archive.observing .probe-stage img {
+    height: clamp(150px, 32dvh, 270px);
+  }
+  #archive.observing .probe-switcher img {
+    width: 40px;
+    height: 32px;
   }
   #archive.observing .entry-info {
     padding-top: 10px;
@@ -2197,6 +2591,11 @@ dialog h3 {
   .sky-tools > .tool-icon {
     width: 32px;
     height: 32px;
+  }
+  .sky-tools > .lang-btn {
+    min-width: 32px;
+    padding: 0 7px;
+    font-size: 11px;
   }
   .sky-tools > button {
     height: 32px;

@@ -14,10 +14,11 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
   return function loadTexture(
     url: string,
     signal: AbortSignal,
-    { maxWidth = Infinity, colorSpace = T.SRGBColorSpace, anisotropy = 1 }: {
+    { maxWidth = Infinity, colorSpace = T.SRGBColorSpace, anisotropy = 1, wrapS = T.ClampToEdgeWrapping }: {
       maxWidth?: number
       colorSpace?: T.ColorSpace
       anisotropy?: number
+      wrapS?: T.Wrapping
     },
     onReady: (texture: T.Texture) => void,
     onError?: () => void,
@@ -58,6 +59,7 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
         const texture = new T.Texture(source)
         texture.colorSpace = colorSpace
         texture.anisotropy = anisotropy
+        texture.wrapS = wrapS
         texture.needsUpdate = true
         onReady(texture)
         return
@@ -65,6 +67,7 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
       const target = new T.FramebufferTexture(width, height)
       target.colorSpace = colorSpace
       target.anisotropy = anisotropy
+      target.wrapS = wrapS
       target.magFilter = T.LinearFilter
       target.minFilter = T.LinearMipmapLinearFilter
       pending = target

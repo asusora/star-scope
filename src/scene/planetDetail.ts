@@ -5,9 +5,10 @@ import {
   buildDetailedBodyGeometry,
   extractTexturePixels,
   getBodyDetailSpec,
+  isProceduralDetailBody,
   type SynthesizedMaps,
 } from './bodyDetail'
-import { planetMaterial } from './planetSurfaces'
+import { cloudBand, cloudProfile, planetMaterial } from './planetSurfaces'
 import type { Moon, World } from './types'
 import type { TextureUpload } from './textureUploads'
 
@@ -21,9 +22,9 @@ export type PlanetBody = Pick<
 }
 
 export type SurfacePixels = Partial<
-  Record<'surface' | 'clouds' | 'night' | 'water' | 'ring', ImageData>
+  Record<'surface' | 'clouds' | 'night' | 'water' | 'ring' | 'normal' | 'emission', ImageData>
 >
-type Channel = keyof SurfacePixels | 'normal'
+type Channel = keyof SurfacePixels
 
 interface CachedProceduralDetail {
   key: string
@@ -39,12 +40,14 @@ export function createPlanetDetail(
 ) {
   const synthesis = createMapSynthesizer()
   const closeGeometry = renderer ? new T.SphereGeometry(1, 160, 108) : null
+  let bandBody = ''
   const proceduralCache = new Map<string, CachedProceduralDetail>()
   const maxCacheEntries = 5
 
   interface PhotoSet {
     controller: AbortController
     textures: Map<Channel, T.Texture>
+    geometry?: T.BufferGeometry
     apply?: (channel: Channel, texture: T.Texture) => void
     failed?: boolean
   }
@@ -52,6 +55,7 @@ export function createPlanetDetail(
   function disposePhotos(set: PhotoSet) {
     set.controller.abort()
     for (const texture of set.textures.values()) texture.dispose()
+    set.geometry?.dispose()
   }
 
   let active: PlanetBody | null = null
@@ -101,6 +105,7 @@ export function createPlanetDetail(
     pixels = {}
     active = body
     if (!body) return
+    const moonRelief = !!body.parentId && isProceduralDetailBody(body.id) && body.id !== 'Titan'
 
     // Case 1: Minor instanced moon — spawn / attach dedicated high-detail sculpted proxy mesh.
     if (body.minorMoon) {
@@ -148,10 +153,12 @@ export function createPlanetDetail(
       if (cached) {
         if (!renderer && cached.maps.albedoPixels) {
           pixels.surface = cached.maps.albedoPixels
+          if (moonRelief) pixels.normal = cached.maps.normalPixels
           requestDraw()
         }
       } else {
         cancelSynth = synthesis.run(spec, mapW, mapH, {
+          closeRelief: moonRelief,
           includeSpecular: spec.baseGloss > 0.1,
           maxAnisotropy: aniso,
           keepPixels: !renderer,
@@ -179,6 +186,7 @@ export function createPlanetDetail(
               proxyMat.needsUpdate = true
             } else if (!renderer && maps.albedoPixels) {
               pixels.surface = maps.albedoPixels
+              if (moonRelief) pixels.normal = maps.normalPixels
             }
             requestDraw()
           },
@@ -229,14 +237,55 @@ export function createPlanetDetail(
     const cloudGeometry = body.clouds?.geometry
     const hazeGeometry = body.haze?.geometry
     const atmoGeometry = body.atmosphere?.geometry
+    const id = body.id
+    const wind = cloudProfile(id)
+    if (wind && closeGeometry && bandBody !== id) {
+      const { widthSegments, heightSegments } = closeGeometry.parameters
+      const uv = closeGeometry.getAttribute('uv')
+      const band = (closeGeometry.getAttribute('jetBand') as T.BufferAttribute | undefined) ??
+        new T.BufferAttribute(new Float32Array(uv.count), 1)
+      for (let row = 0; row <= heightSegments; row++) {
+        const start = row * (widthSegments + 1)
+        band.array.fill(cloudBand(id, uv.getY(start)), start, start + widthSegments + 1)
+      }
+      band.needsUpdate = true
+      closeGeometry.setAttribute('jetBand', band)
+      bandBody = id
+    }
+
+    function restoreSurface() {
+      // The overview worker may have finished while the close-up owned this material.
+      const mid = surface.userData.midMaps as SynthesizedMaps | undefined
+      surface.color.setHex(mid ? 0xffffff : baseColorHex)
+      surface.map = mid ? mid.albedo : base
+      surface.bumpMap = mid ? null : baseBump
+      surface.normalMap = mid ? mid.normal : baseNormal
+      surface.specularMap = mid ? mid.specular : baseSpecMap
+      surface.emissiveMap = mid ? mid.emissive : baseEmissiveMap
+      if (mid && mid.normal !== baseNormal) {
+        const scale = id === 'Titan' ? 0.25 : 0.92
+        surface.normalScale.set(scale, scale)
+      } else {
+        surface.normalScale.set(baseNormalScaleX, baseNormalScaleY)
+      }
+      surface.specular.setHex(baseSpecularHex)
+      surface.userData.detailActive = false
+      surface.userData.photoCloudDetail = false
+      surface.needsUpdate = true
+    }
 
     const hasStaticDetail = !!detailSources[body.id]
 
     // Case 2: Major planets & Earth's Moon — load high-resolution photographic detail maps.
     if (hasStaticDetail) {
       const pending = new Set<HTMLImageElement>()
+      const mappedMoon = !!body.parentId && id !== 'Moon'
+      let loadedNormal: T.Texture | null = null
+      let loadedEmission: T.Texture | null = null
       if (closeGeometry) {
-        mesh.geometry = closeGeometry
+        surface.userData.detailActive = true
+        // Keep the silhouette of sculpted moons, including Iapetus's equatorial ridge.
+        mesh.geometry = mappedMoon && getBodyDetailSpec(id).customShape ? geometry : closeGeometry
         if (body.clouds) body.clouds.geometry = closeGeometry
         if (body.haze) body.haze.geometry = closeGeometry
         if (body.atmosphere) body.atmosphere.geometry = closeGeometry
@@ -245,17 +294,31 @@ export function createPlanetDetail(
         switch (channel) {
           case 'surface':
             surface.map = texture
-            if (baseBump && baseBump === base) surface.bumpMap = texture
+            if (wind || mappedMoon || id === 'Pluto') {
+              surface.color.setHex(0xffffff)
+              surface.userData.photoCloudDetail = !!wind
+              surface.bumpMap = null
+              surface.normalMap = loadedNormal
+              surface.specularMap = null
+              surface.emissiveMap = loadedEmission
+            } else if (baseBump && baseBump === base && !surface.normalMap) {
+              surface.bumpMap = texture
+            }
             break
           case 'night':
             surface.emissiveMap = texture
+            break
+          case 'emission':
+            loadedEmission = surface.emissiveMap = texture
             break
           case 'water':
             surface.specularMap = texture
             surface.specular.setHex(0x788492)
             break
           case 'normal':
+            loadedNormal = texture
             surface.normalMap = texture
+            surface.bumpMap = null
             break
           case 'clouds':
             if (clouds) {
@@ -263,9 +326,13 @@ export function createPlanetDetail(
               clouds.needsUpdate = true
             }
             if (earthCloudMap) earthCloudMap.value = texture
+            surface.userData.photoCloudDetail = true
             break
           case 'ring':
-            if (ring) ring.map = texture
+            if (ring) {
+              ring.map = texture
+              if (ring.userData.closeOpticalDepth) ring.userData.closeOpticalDepth.value = 1
+            }
             break
         }
         surface.needsUpdate = true
@@ -306,12 +373,13 @@ export function createPlanetDetail(
               maxWidth,
               colorSpace: srgb ? T.SRGBColorSpace : T.NoColorSpace,
               anisotropy: Math.min(4, renderer.capabilities.getMaxAnisotropy()),
+              wrapS: channel === 'ring' ? T.ClampToEdgeWrapping : T.RepeatWrapping,
             }, (texture) => {
               entry.textures.get(channel)?.dispose()
               entry.textures.set(channel, texture)
               entry.apply?.(channel, texture)
             }, () => { entry.failed = true })
-          } else if (channel !== 'normal') {
+          } else {
             const image = new Image()
             pending.add(image)
             image.onload = () => {
@@ -330,13 +398,18 @@ export function createPlanetDetail(
           }
         }
         load(body.id, 'surface', true)
+        if (id !== 'Earth' || renderer) load(id + 'Normal', 'normal', false)
+        if (id === 'Io') load('IoEmission', 'emission', true)
         if (body.id === 'Earth') {
           load('EarthNight', 'night', true)
           load('EarthWater', 'water', false)
           load('EarthClouds', 'clouds', false)
-          if (renderer) load('EarthNormal', 'normal', false)
         }
         if (body.id === 'Saturn' && ring) load('SaturnRing', 'ring', true)
+      }
+      if (renderer && set && mappedMoon && getBodyDetailSpec(id).customShape) {
+        set.geometry ??= buildDetailedBodyGeometry(id, 'close', body.parentId, body.semiMajorKm)
+        mesh.geometry = set.geometry
       }
       release = () => {
         for (const image of pending) {
@@ -346,11 +419,8 @@ export function createPlanetDetail(
         }
         if (renderer) {
           mesh.geometry = geometry
-          surface.map = base
-          surface.bumpMap = baseBump
+          restoreSurface()
           if (body.id === 'Earth') {
-            surface.emissiveMap = surface.normalMap = surface.specularMap = null
-            surface.specular.setHex(0x182028)
             if (clouds) {
               clouds.alphaMap = cloudMask
               clouds.needsUpdate = true
@@ -362,6 +432,7 @@ export function createPlanetDetail(
           if (body.atmosphere && atmoGeometry) body.atmosphere.geometry = atmoGeometry
           if (ring) {
             ring.map = ringMap
+            if (ring.userData.closeOpticalDepth) ring.userData.closeOpticalDepth.value = 0
           }
           surface.needsUpdate = true
           if (set) set.apply = undefined
@@ -389,7 +460,8 @@ export function createPlanetDetail(
         surface.color.setHex(0xffffff)
         surface.map = maps.albedo
         surface.bumpMap = null
-        surface.normalMap = maps.normal
+        surface.normalMap = wind ? null : maps.normal
+        surface.userData.photoCloudDetail = !!wind
         const nScale = spec.titanBands ? 0.3 : spec.customShape ? 1.08 : 0.96
         surface.normalScale.set(nScale, nScale)
         if (maps.specular && (spec.baseGloss > 0.12 || (spec.iceGlossBoost ?? 0) > 0.2)) {
@@ -402,6 +474,8 @@ export function createPlanetDetail(
         surface.needsUpdate = true
       } else if (maps.albedoPixels) {
         pixels.surface = maps.albedoPixels
+        if (moonRelief) pixels.normal = maps.normalPixels
+        pixels.emission = maps.emissivePixels
       }
       requestDraw()
     }
@@ -424,6 +498,7 @@ export function createPlanetDetail(
     } else {
       const basePixels = spec.baseImageMix ? extractTexturePixels(base, 512) : null
       cancelSynth = synthesis.run(spec, mapW, mapH, {
+        closeRelief: moonRelief,
         basePixels,
         includeSpecular: spec.baseGloss > 0.12 || (spec.iceGlossBoost ?? 0) > 0.2,
         maxAnisotropy: aniso,
@@ -451,27 +526,7 @@ export function createPlanetDetail(
       if (renderer) {
         mesh.geometry = geometry
         if (body.atmosphere && atmoGeometry) body.atmosphere.geometry = atmoGeometry
-        const midMaps = surface.userData.midMaps as SynthesizedMaps | undefined
-        if (midMaps) {
-          surface.color.setHex(0xffffff)
-          surface.map = midMaps.albedo
-          surface.bumpMap = null
-          surface.normalMap = midMaps.normal
-          surface.normalScale.set(baseNormalScaleX, baseNormalScaleY)
-          surface.specularMap = midMaps.specular
-          surface.emissiveMap = midMaps.emissive
-          surface.specular.setHex(baseSpecularHex)
-        } else {
-          surface.color.setHex(baseColorHex)
-          surface.map = base
-          surface.bumpMap = baseBump
-          surface.normalMap = baseNormal
-          surface.normalScale.set(baseNormalScaleX, baseNormalScaleY)
-          surface.specularMap = baseSpecMap
-          surface.emissiveMap = baseEmissiveMap
-          surface.specular.setHex(baseSpecularHex)
-        }
-        surface.needsUpdate = true
+        restoreSurface()
       }
       if (tempGeo) {
         tempGeo.dispose()
@@ -483,7 +538,16 @@ export function createPlanetDetail(
 
   return {
     select,
-    syncProxy,
+    update(clock: number) {
+      if (active) {
+        const wind = cloudProfile(active.id)
+        if (wind) {
+          const material = active.mesh.material as T.MeshPhongMaterial
+          material.userData.cloudDrift.value = (clock * wind.rate) % 1
+        }
+      }
+      syncProxy()
+    },
     pixelsFor: (id: string) => (active?.id === id ? pixels : null),
     dispose() {
       select(null)

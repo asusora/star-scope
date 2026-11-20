@@ -1,4 +1,5 @@
 import { archivePhotos, thumbs } from './assets'
+import { getProbePhotos } from './probePhotos'
 import type { ArchiveEntry, World } from '../scene/types'
 export const jplFacts = 'https://ssd.jpl.nasa.gov/sats/elem/'
 export const moonSources: Record<string, string> = {
@@ -28,6 +29,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       alt: 'Andromeda Galaxy',
       distance: '约 250 万光年',
       place: '仙女座',
+      discovered: '自古已知（964 年见于记载）',
       body: '与银河系同属本星系群。星盘相对我们大幅倾斜，从地球看去呈细长的椭圆形。照片是哈勃拼接的部分星盘。',
       credit: 'NASA、ESA、PHAT 团队、J. Dalcanton、B. F. Williams、L. C. Johnson 与 R. Gendler',
     },
@@ -38,6 +40,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       alt: 'Triangulum Galaxy',
       distance: '约 300 万光年',
       place: '三角座',
+      discovered: '1654 年前（1764 年编目）',
       body: '本星系群的另一个旋涡星系。沿旋臂可以看到密集的年轻恒星和形成恒星的区域。',
       credit: 'NASA、ESA、M. Durbin、J. Dalcanton 与 B. F. Williams',
     },
@@ -48,6 +51,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       alt: 'Whirlpool Galaxy',
       distance: '约 3100 万光年',
       place: '猎犬座',
+      discovered: '1773 年',
       body: '从地球看过去，它几乎正面朝向我们。两条明亮旋臂向外延伸，旁边可见与之相互作用的伴星系。',
       credit: 'NASA、ESA、S. Beckwith 与 Hubble Heritage Team（STScI/AURA）',
     },
@@ -58,6 +62,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       alt: 'Sombrero Galaxy 宽边帽星系',
       distance: '约 2800 万光年',
       place: '室女座',
+      discovered: '1781 年',
       body: '接近侧向的视角让深色尘埃带横贯明亮的中央核球，形成了像宽檐帽一样的轮廓。',
       credit: 'NASA 与 Hubble Heritage Team（STScI/AURA）',
     },
@@ -68,6 +73,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       alt: 'Cigar Galaxy',
       distance: '约 1200 万光年',
       place: '大熊座',
+      discovered: '1774 年',
       body: '沿侧面看去，M82 的星盘细长如雪茄。中心区域正大量形成恒星，红色气体从星盘向外延伸。',
       credit:
         'NASA、ESA、Hubble Heritage Team（STScI/AURA）；致谢 J. Gallagher、M. Mountain、P. Puxley',
@@ -79,6 +85,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       alt: 'Virgo A 室女A 室女座A星系 M87星系',
       distance: '约 5400 万光年',
       place: '室女座',
+      discovered: '1781 年',
       body: '这座巨椭圆星系的中心有一颗超大质量黑洞。一束高速物质从核心喷出，在哈勃影像中显出蓝色。',
       credit: 'NASA、ESA、Hubble Heritage Team（STScI/AURA）；致谢 P. Côté、E. Baltz',
     },
@@ -90,6 +97,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     facts: [
       ['距离', e.distance],
       ['星座', e.place],
+      ['发现年份', e.discovered],
     ],
     source: messierBase + e.id.slice(1) + '/',
   }))
@@ -102,6 +110,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       distance: '约 8.6 光年',
       place: '大犬座',
       type: '双星系统',
+      discovered: '自古已知（伴星 1862 年发现）',
       body: '明亮的天狼星 A 与暗弱的白矮星天狼星 B 约每 50 年互绕一周。哈勃影像中，主星的光芒几乎淹没了伴星。',
       caption: '哈勃望远镜观测影像',
       credit: 'NASA、ESA、H. Bond（STScI）、M. Barstow（University of Leicester）',
@@ -115,6 +124,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       distance: '约 600 光年',
       place: '猎户座',
       type: '红超巨星',
+      discovered: '自古已知',
       body: '参宿四位于猎户座的肩部。ALMA 在毫米波波段分辨出了它延展的大气层，盘面上一块区域比周围更亮。',
       caption: 'ALMA 毫米波观测影像',
       credit: 'ALMA（ESO/NAOJ/NRAO）/ E. O’Gorman / P. Kervella',
@@ -128,6 +138,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       distance: '约 25 光年',
       place: '天琴座',
       type: '主序星',
+      discovered: '自古已知',
       body: '织女星周围有一片近乎正面朝向我们的尘埃盘。韦布在中红外波段记录了暖尘的辐射，揭示出盘内平滑的结构。',
       caption: '织女星周围的尘埃盘 · 韦伯中红外观测',
       credit: 'NASA、ESA、CSA、STScI、K. Su、A. Gáspár（University of Arizona）',
@@ -141,6 +152,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       distance: '约 4.2 光年',
       place: '半人马座',
       type: '红矮星',
+      discovered: '1915 年',
       body: '这是离太阳最近的恒星。它本身十分暗弱，肉眼难以看见，偶尔却会因耀斑而增亮。「比邻星 b」是绕它运行的行星。',
       caption: '哈勃望远镜观测影像',
       credit: 'ESA/Hubble 与 NASA',
@@ -155,6 +167,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
         ['类型', e.type],
         ['距离', e.distance],
         ['星座', e.place],
+        ['发现年份', e.discovered],
       ],
     })
   }
@@ -221,11 +234,13 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
             imageSource: 'https://esahubble.org/images/opo1436a/',
           }
         : { credit: 'NASA 系外行星目录' }
+    const discovered = `${year} 年`
     catalogEntries.push({
       id,
       title,
       code,
       group: '系外行星',
+      discovered,
       photo: archivePhotos[id],
       caption: '艺术想象图',
       ...artwork,
@@ -233,7 +248,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       facts: [
         ['类型', type],
         ['公转周期', days],
-        ['发现年份', year],
+        ['发现年份', discovered],
       ],
       source: 'https://science.nasa.gov/exoplanet-catalog/' + id + '/',
     })
@@ -244,6 +259,11 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     centaur: '半人马小天体带（巨行星之间）',
     outer: '柯伊伯带（海王星外 30–50 AU）',
     scattered: '离散盘与内奥尔特云（50–1000 AU）',
+  }
+  const upcomingMissions: Record<string, string> = {
+    Psyche: '暂无（灵神星号在途，预计 2029 年抵达）',
+    Eurybates: '暂无（露西号在途，预计 2027 年飞掠）',
+    Patroclus: '暂无（露西号在途，预计 2033 年飞掠）',
   }
   const worldAliases: Record<string, string> = {
     Psyche: '16 Psyche 金属小行星 灵神星号',
@@ -261,8 +281,10 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     Sedna: '90377 Sedna 赛德娜 塞德娜 内奥尔特云',
   }
   for (const p of worlds) {
+    const worldProbes = getProbePhotos(p.id)
     const facts: string[][] = [
       ['类别', p.kind || '行星'],
+      ['发现年份', p.discovered || '未列出'],
       ['卫星数', String(p.moons.length)],
       ['公转周期', (p.days / 365.25).toFixed(p.days > 36525 ? 0 : 2) + ' 年'],
     ]
@@ -277,14 +299,22 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     if (p.region && regionNames[p.region]) {
       facts.push(['所属区域', regionNames[p.region]])
     }
+    facts.push([
+      '探测器实拍',
+      worldProbes
+        ? `已收录 ${worldProbes.length} 张实拍`
+        : upcomingMissions[p.id] || '暂无近距实拍',
+    ])
     catalogEntries.push({
       id: p.id,
       title: p.name,
       code: p.code || p.id,
       alt: worldAliases[p.id],
       group: '太阳系',
+      discovered: p.discovered,
       photo: thumbs[p.id],
       caption: '场景模型',
+      probePhotos: worldProbes,
       object: p,
       facts,
       body:
@@ -297,11 +327,29 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       source: p.source || 'https://science.nasa.gov/' + p.id.toLowerCase() + '/',
     })
     for (const m of p.moons) {
+      const moonId = p.id + '-' + m.name
+      const moonProbes = getProbePhotos(moonId)
+      const moonFacts: string[][] = [
+        ['母天体', p.name],
+        ['发现年份', m.discovered || '未列出'],
+        [m.estimate ? '观测距离' : '轨道半长轴', m.a.toLocaleString('zh-CN') + ' km'],
+        ['公转周期', m.period ? m.period + ' 天' : '未列出'],
+        [
+          '探测器实拍',
+          moonProbes
+            ? `已收录 ${moonProbes.length} 张实拍`
+            : upcomingMissions[p.id]
+              ? '暂无（露西号计划探测所属系统）'
+              : '暂无近距实拍',
+        ],
+      ]
       catalogEntries.push({
-        id: p.id + '-' + m.name,
+        id: moonId,
         title: m.label,
         code: [...new Set([m.numberName, m.name].filter((s) => s && s !== m.label))].join(' · '),
         group: '太阳系',
+        discovered: m.discovered,
+        probePhotos: moonProbes,
         moon: m,
         object: p,
         keys: m.searchNames,
@@ -309,11 +357,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
         body: m.otherNames.length
           ? '也可以用' + m.otherNames.join('、') + '查找这颗卫星。'
           : m.name + ' 环绕' + p.name + '运行。',
-        facts: [
-          ['母天体', p.name],
-          [m.estimate ? '观测距离' : '轨道半长轴', m.a.toLocaleString('zh-CN') + ' km'],
-          ['公转周期', m.period ? m.period + ' 天' : '未列出'],
-        ],
+        facts: moonFacts,
         source:
           moonSources[p.id] ||
           (m.estimate ? 'https://tamkin3.eps.harvard.edu/iauc/09000/09091.html' : jplFacts),

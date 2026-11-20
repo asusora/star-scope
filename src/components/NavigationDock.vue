@@ -3,16 +3,29 @@ import { computed, useTemplateRef, watch } from 'vue'
 import type { Atlas } from '../scene/atlas'
 import { deepGroups, type Belt, type SceneUI, type Group, type OrbitMode } from '../scene/types'
 import { thumbs } from '../data/assets'
+import { groupLabel, isEn, pick } from '../i18n'
+import { worldKind, worldName } from '../i18n/catalogEn'
+import { localizedEntry } from '../i18n/archiveLocale'
 
 const { atlas, ui } = defineProps<{ atlas: Atlas; ui: SceneUI }>()
 const groups: Group[] = ['太阳系', ...deepGroups]
-const beltZones: { id: Belt; label: string }[] = [
-  { id: 'main', label: '主小行星带' },
-  { id: 'trojan', label: '木星特洛伊' },
-  { id: 'centaur', label: '半人马带' },
-  { id: 'outer', label: '柯伊伯带' },
-  { id: 'scattered', label: '离散盘 · 极远' },
-]
+const planetAu: Record<string, string> = {
+  Mercury: '0.39 AU',
+  Venus: '0.72 AU',
+  Earth: '1.00 AU',
+  Mars: '1.52 AU',
+  Jupiter: '5.20 AU',
+  Saturn: '9.58 AU',
+  Uranus: '19.2 AU',
+  Neptune: '30.1 AU',
+}
+const beltZones = computed<{ id: Belt; label: string }[]>(() => [
+  { id: 'main', label: pick('主小行星带', 'Main Belt') },
+  { id: 'trojan', label: pick('木星特洛伊', 'Trojans') },
+  { id: 'centaur', label: pick('半人马带', 'Centaurs') },
+  { id: 'outer', label: pick('柯伊伯带', 'Kuiper Belt') },
+  { id: 'scattered', label: pick('离散盘 · 极远', 'Scattered') },
+])
 const smallStrip = computed(() =>
   [...atlas.smallBodies].sort((a, b) => (a.au ?? 0) - (b.au ?? 0)),
 )
@@ -20,11 +33,11 @@ function formatAU(au?: number) {
   if (!au) return ''
   return (au >= 100 ? Math.round(au) : au.toFixed(1)) + ' AU'
 }
-const tracks: { value: OrbitMode; label: string }[] = [
-  { value: 'smart', label: '智能' },
-  { value: 'all', label: '全部' },
-  { value: 'off', label: '关闭' },
-]
+const tracks = computed<{ value: OrbitMode; label: string }[]>(() => [
+  { value: 'smart', label: pick('智能', 'Smart') },
+  { value: 'all', label: pick('全部', 'All') },
+  { value: 'off', label: pick('关闭', 'Off') },
+])
 const deepEntries = computed(() =>
   ui.group === '太阳系' ? [] : atlas.entries.filter((e) => e.group === ui.group),
 )
@@ -71,7 +84,9 @@ function touchEnd(event: TouchEvent) {
         <circle cx="8" cy="8" r="2.2" fill="currentColor" />
         <circle cx="12.2" cy="4.2" r="1.2" fill="var(--cyan)" />
       </svg>
-      <span>{{ ui.dockOpen ? '收起导航' : '天体导航' }}</span>
+      <span>{{
+        ui.dockOpen ? pick('收起导航', 'Hide Dock') : pick('天体导航', 'Explore')
+      }}</span>
       <svg class="dock-chevron" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <path
           d="M3.2 8.8L7 5l3.8 3.8"
@@ -87,7 +102,9 @@ function touchEnd(event: TouchEvent) {
         <div class="transport">
           <button
             id="play"
-            :aria-label="ui.playing ? '暂停动画' : '播放动画'"
+            :aria-label="
+              ui.playing ? pick('暂停动画', 'Pause simulation') : pick('播放动画', 'Play simulation')
+            "
             @click="atlas.setPlaying(!ui.playing)"
           >
             <svg v-if="ui.playing" class="ui-ico-sm" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
@@ -97,11 +114,11 @@ function touchEnd(event: TouchEvent) {
             <svg v-else class="ui-ico-sm" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
               <path d="M3.5 2.4l8 4.6-8 4.6V2.4z" />
             </svg>
-            <span>{{ ui.playing ? '暂停' : '播放' }}</span>
+            <span>{{ ui.playing ? pick('暂停', 'Pause') : pick('播放', 'Play') }}</span>
           </button>
           <div class="speed-control">
-            <span aria-hidden="true">速率</span>
-            <div id="speed" role="group" aria-label="动画速度">
+            <span aria-hidden="true">{{ pick('速率', 'Speed') }}</span>
+            <div id="speed" role="group" :aria-label="pick('动画速度', 'Simulation speed')">
               <button
                 v-for="n in [0.25, 0.5, 1, 2, 5]"
                 :key="n"
@@ -115,9 +132,9 @@ function touchEnd(event: TouchEvent) {
         </div>
         <div class="toggles">
           <div class="orbit-options">
-            <span aria-hidden="true">轨道</span>
+            <span aria-hidden="true">{{ pick('轨道', 'Orbits') }}</span>
             <fieldset id="tracks" :disabled="ui.tracksDisabled">
-              <legend class="sr-only">轨道显示</legend>
+              <legend class="sr-only">{{ pick('轨道显示', 'Orbit display') }}</legend>
               <label v-for="mode in tracks" :key="mode.value"
                 ><input
                   type="radio"
@@ -130,22 +147,27 @@ function touchEnd(event: TouchEvent) {
             </fieldset>
           </div>
           <button id="labels" :aria-pressed="ui.showNames" @click="atlas.setLabels(!ui.showNames)">
-            <i></i><span>标注</span>
+            <i></i><span>{{ pick('标注', 'Labels') }}</span>
           </button>
         </div>
       </div>
       <div class="dock-nav-row">
-        <div id="navGroups" role="group" aria-label="天体导航分类">
+        <div id="navGroups" role="group" :aria-label="pick('天体导航分类', 'Navigation categories')">
           <button
             v-for="group in groups"
             :key="group"
             :aria-pressed="ui.group === group"
             @click="ui.group = group"
           >
-            {{ group }}
+            {{ groupLabel(group) }}
           </button>
         </div>
-        <div class="belt-links" :hidden="ui.group !== '太阳系'" role="group" aria-label="小天体带区域">
+        <div
+          class="belt-links"
+          :hidden="ui.group !== '太阳系'"
+          role="group"
+          :aria-label="pick('小天体带区域', 'Small body regions')"
+        >
           <button
             v-for="zone in beltZones"
             :key="zone.id"
@@ -166,7 +188,7 @@ function touchEnd(event: TouchEvent) {
         @pointerleave="atlas.preview(null)"
         @focusout="atlas.preview(null)"
       >
-        <nav id="destinations" aria-label="太阳系八大行星">
+        <nav id="destinations" :aria-label="pick('太阳系八大行星', 'Solar System planets')">
           <button
             class="destination"
             id="home"
@@ -182,14 +204,21 @@ function touchEnd(event: TouchEvent) {
                 <circle cx="21.4" cy="14" r="1.5" fill="var(--amber)" />
               </svg>
             </span>
-            <span class="dest-meta"><b>全景</b><small>OVERVIEW</small></span>
+            <span class="dest-meta"
+              ><b>{{ pick('全景', 'Overview') }}</b
+              ><small>{{ pick('OVERVIEW', 'SOLAR') }}</small></span
+            >
           </button>
           <button
             v-for="planet in atlas.planets"
             :key="planet.id"
             class="destination"
             :data-planet="planet.id"
-            :aria-label="planet.name + '，' + planet.moons.length + ' 颗卫星'"
+            :aria-label="
+              isEn
+                ? `${worldName(planet, 'en')}, ${planet.moons.length} ${planet.moons.length === 1 ? 'moon' : 'moons'}`
+                : planet.name + '，' + planet.moons.length + ' 颗卫星'
+            "
             :aria-pressed="!ui.deepEntry && planet === ui.planet"
             @pointerover="$event.pointerType === 'mouse' && atlas.preview(planet)"
             @focus="atlas.preview(planet)"
@@ -199,18 +228,25 @@ function touchEnd(event: TouchEvent) {
               <img :src="thumbs[planet.id]" alt="" />
             </span>
             <span class="dest-meta"
-              ><b>{{ planet.name }}</b
-              ><small>{{ planet.id }}</small></span
+              ><b>{{ worldName(planet) }}</b
+              ><small>{{ isEn ? planetAu[planet.id] ?? planet.id : planet.id }}</small></span
             >
           </button>
         </nav>
-        <nav id="smallDestinations" aria-label="矮行星、半人马与极远天体">
+        <nav
+          id="smallDestinations"
+          :aria-label="pick('矮行星、半人马与极远天体', 'Dwarf planets, centaurs and outer worlds')"
+        >
           <button
             v-for="body in smallStrip"
             :key="body.id"
             class="small-dest"
             :data-planet="body.id"
-            :aria-label="body.name + '，' + (body.kind ?? '小天体') + '，' + formatAU(body.au)"
+            :aria-label="
+              isEn
+                ? `${worldName(body, 'en')}, ${worldKind(body, 'en')}, ${formatAU(body.au)}`
+                : body.name + '，' + (body.kind ?? '小天体') + '，' + formatAU(body.au)
+            "
             :aria-pressed="!ui.deepEntry && body === ui.planet"
             @pointerover="$event.pointerType === 'mouse' && atlas.preview(body)"
             @focus="atlas.preview(body)"
@@ -221,23 +257,31 @@ function touchEnd(event: TouchEvent) {
               <span v-else class="small-dot" aria-hidden="true"></span>
             </span>
             <span class="small-meta"
-              ><b>{{ body.name }}</b
+              ><b>{{ worldName(body) }}</b
               ><small>{{ formatAU(body.au) }}</small></span
             >
           </button>
         </nav>
       </div>
-      <nav id="deepDestinations" :hidden="ui.group === '太阳系'" :aria-label="ui.group + '天体'">
+      <nav
+        id="deepDestinations"
+        :hidden="ui.group === '太阳系'"
+        :aria-label="isEn ? groupLabel(ui.group) : ui.group + '天体'"
+      >
         <button
           v-for="entry in deepEntries"
           :key="entry.id"
           :data-entry="entry.id"
-          :aria-label="'三维观测 ' + entry.title"
+          :aria-label="
+            isEn
+              ? `3D view of ${localizedEntry(entry, 'en').title}`
+              : '三维观测 ' + entry.title
+          "
           :aria-pressed="ui.deepEntry === entry"
           @click="atlas.openDeepTarget(entry)"
         >
           <img :src="entry.photo" alt="" /><span class="deep-name"
-            ><b>{{ entry.title }}</b
+            ><b>{{ localizedEntry(entry).title }}</b
             ><small>{{ entry.code.split(' · ')[0] }}</small></span
           >
         </button>

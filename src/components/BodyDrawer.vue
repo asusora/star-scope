@@ -1,11 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Atlas } from '../scene/atlas'
-import type { SceneUI } from '../scene/types'
+import type { ArchiveEntry, Moon, SceneUI, World } from '../scene/types'
 import { normalized } from '../data/archive'
+import { formatNum, isEn, pick, regionDrawerTitle } from '../i18n'
+import {
+  moonDiscovered,
+  moonLabel,
+  moonNumberName,
+  moonOtherNames,
+  worldKind,
+  worldName,
+} from '../i18n/catalogEn'
 
 const gasGiants = ['Jupiter', 'Saturn', 'Uranus', 'Neptune']
-const { ui, atlas } = defineProps<{ ui: SceneUI; atlas: Atlas }>()
+const { ui, atlas, currentEntry } = defineProps<{
+  ui: SceneUI
+  atlas: Atlas
+  currentEntry?: ArchiveEntry | null
+}>()
+const emit = defineEmits<{ openArchive: [entry: ArchiveEntry] }>()
 const smallBodies = computed(() => atlas.smallBodies.filter((p) => p.region === ui.region))
 const moons = computed(() => {
   const q = normalized(ui.search)
@@ -13,20 +27,43 @@ const moons = computed(() => {
     ui.planet?.moons.filter((m) => m.searchNames.some((key) => normalized(key).includes(q))) ?? []
   )
 })
-const regionTitles: Record<string, string> = {
-  main: '主小行星带天体',
-  trojan: '木星特洛伊群天体',
-  centaur: '半人马小天体带',
-  outer: '柯伊伯带天体',
-  scattered: '离散盘与极远天体',
-}
-const title = computed(() =>
-  ui.region ? regionTitles[ui.region] ?? '区域天体' : (ui.planet?.name ?? '') + '卫星',
-)
-function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
+const title = computed(() => {
+  if (ui.region) return regionDrawerTitle(ui.region)
+  if (!ui.planet) return ''
+  return isEn.value ? `${worldName(ui.planet, 'en')} Moons` : ui.planet.name + '卫星'
+})
+function bodySubtitle(p: World) {
   const au = p.au ? (p.au >= 100 ? Math.round(p.au) : p.au.toFixed(1)) + ' AU' : p.id
-  return `${p.kind ?? '小天体'} · ${au}`
+  return `${worldKind(p)} · ${au}`
 }
+function moonRowSub(m: Moon) {
+  if (isEn.value) {
+    const num = moonNumberName(m, 'en')
+    return [num, m.des].filter((s) => s && s !== m.name).join(' · ') || (m.year ? String(m.year) : '')
+  }
+  return (
+    [m.label === m.name ? '' : m.name, m.numberName].filter(Boolean).join(' · ') || (m.year ?? '')
+  )
+}
+const landLabel = computed(() => {
+  if (!ui.moon && gasGiants.includes(ui.planet?.id ?? '')) {
+    return pick('进入云层', 'Enter Clouds')
+  }
+  const target = ui.moon
+    ? moonLabel(ui.moon)
+    : ui.planet
+      ? worldName(ui.planet)
+      : pick('火星', 'Mars')
+  return isEn.value ? `Land on ${target}` : '着陆' + target
+})
+const returnLabel = computed(() => {
+  if (ui.deepEntry) return pick('返回原视图', 'Back')
+  if (ui.moon) {
+    const pName = ui.planet ? worldName(ui.planet) : ''
+    return isEn.value ? `Back to ${pName}` : '返回' + pName
+  }
+  return pick('太阳系全景', 'Solar Overview')
+})
 </script>
 <template>
   <div class="stage-actions">
@@ -40,11 +77,37 @@ function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
           stroke-linejoin="round"
         />
       </svg>
+      <span>{{ landLabel }}</span>
+    </button>
+    <button
+      id="bodyArchive"
+      v-if="currentEntry"
+      :class="{ 'has-probe': !!currentEntry.probePhotos?.length }"
+      @click="emit('openArchive', currentEntry)"
+    >
+      <svg
+        v-if="currentEntry.probePhotos?.length"
+        class="ui-ico-sm"
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-hidden="true"
+      >
+        <rect x="1.8" y="3.3" width="10.4" height="7.9" rx="1.6" stroke="currentColor" stroke-width="1.25" />
+        <circle cx="7" cy="7.2" r="2.1" stroke="currentColor" stroke-width="1.2" />
+        <path d="M4.8 3.3l.7-1.2h3l.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+      </svg>
+      <svg v-else class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <rect x="2.2" y="2.2" width="9.6" height="9.6" rx="1.6" stroke="currentColor" stroke-width="1.25" />
+        <path d="M4.5 5.4h5M4.5 7.8h3.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+      </svg>
       <span>{{
-        !ui.moon && gasGiants.includes(ui.planet?.id ?? '')
-          ? '进入云层'
-          : '着陆' + (ui.moon?.label ?? ui.planet?.name ?? '火星')
+        currentEntry.probePhotos?.length
+          ? pick('实拍与资料', 'Photos & Info')
+          : pick('天体资料', 'Profile')
       }}</span>
+      <span v-if="currentEntry.probePhotos?.length" class="probe-count">
+        {{ currentEntry.probePhotos.length }}
+      </span>
     </button>
     <button id="return" :hidden="!ui.deepEntry && !ui.planet && !ui.region" @click="atlas.goBack()">
       <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -56,9 +119,7 @@ function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
           stroke-linejoin="round"
         />
       </svg>
-      <span>{{
-        ui.deepEntry ? '返回原视图' : ui.moon ? '返回' + ui.planet?.name : '太阳系全景'
-      }}</span></button
+      <span>{{ returnLabel }}</span></button
     ><button
       id="catalogButton"
       :hidden="!!ui.deepEntry || (!ui.planet && !ui.region)"
@@ -71,17 +132,29 @@ function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
         <circle cx="7" cy="7" r="5.3" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 2" />
         <circle cx="11.3" cy="4.2" r="1.1" fill="currentColor" />
       </svg>
-      <span id="catalogType">{{ ui.region ? '区域天体' : '卫星目录' }}</span>
+      <span id="catalogType">{{
+        ui.region ? pick('区域天体', 'Region') : pick('卫星目录', 'Moons')
+      }}</span>
       <span id="count">{{ ui.planet?.moons.length ?? smallBodies.length }}</span>
     </button>
   </div>
   <aside id="drawer" :hidden="!ui.drawerOpen" :aria-label="title">
-    <div class="drawer-kicker">{{ ui.region ? 'REGION // 区域名录' : 'ORBITAL CATALOG // 卫星' }}</div>
+    <div class="drawer-kicker">
+      {{
+        ui.region
+          ? pick('REGION // 区域名录', 'REGION // MINOR BODIES')
+          : pick('ORBITAL CATALOG // 卫星', 'ORBITAL CATALOG // MOONS')
+      }}
+    </div>
     <div class="drawer-head">
       <strong id="drawerTitle">{{ title }}</strong
       ><button
         id="closeDrawer"
-        :aria-label="ui.region ? '关闭区域名录' : '关闭卫星目录'"
+        :aria-label="
+          ui.region
+            ? pick('关闭区域名录', 'Close Region Catalog')
+            : pick('关闭卫星目录', 'Close Moon Catalog')
+        "
         @click="atlas.drawer(false)"
       >
         <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -99,8 +172,8 @@ function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
         type="search"
         v-model="ui.search"
         @input="atlas.preview(null)"
-        placeholder="搜索名称或临时编号"
-        aria-label="搜索卫星"
+        :placeholder="pick('搜索名称或临时编号', 'Search name or designation')"
+        :aria-label="pick('搜索卫星', 'Search moons')"
       />
     </div>
     <div id="moonList" @pointerleave="atlas.preview(null)" @focusout="atlas.preview(null)">
@@ -114,7 +187,7 @@ function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
           @focus="atlas.preview(p)"
           @click="atlas.openPlanet(p)"
         >
-          <span>{{ p.name }}</span
+          <span>{{ worldName(p) }}</span
           ><small>{{ bodySubtitle(p) }}</small>
         </button></template
       >
@@ -129,28 +202,54 @@ function bodySubtitle(p: { kind?: string; au?: number; id: string }) {
           @focus="atlas.preview(m)"
           @click="atlas.openMoon(m)"
         >
-          <span>{{ m.label }}</span
-          ><small>{{
-            [m.label === m.name ? '' : m.name, m.numberName].filter(Boolean).join(' · ') ||
-            (m.year ?? '')
-          }}</small>
+          <span>{{ moonLabel(m) }}</span
+          ><small>{{ moonRowSub(m) }}</small>
         </button>
         <p v-if="!moons.length" class="empty">
-          {{ ui.planet?.moons.length ? '没有匹配的卫星。' : '该天体目前没有已知天然卫星。' }}
+          {{
+            ui.planet?.moons.length
+              ? pick('没有匹配的卫星。', 'No matching moons.')
+              : pick('该天体目前没有已知天然卫星。', 'No known natural satellites.')
+          }}
         </p></template
       >
     </div>
     <div id="detail" aria-live="polite" :hidden="!ui.moon">
       <template v-if="ui.moon">
-        <b>{{ [ui.moon.label, ...ui.moon.otherNames].join(' · ') }}</b>
+        <b>{{ [moonLabel(ui.moon), ...moonOtherNames(ui.moon)].join(' · ') }}</b>
         <div class="detail-row">
-          <span>{{ ui.moon.estimate ? '观测距离' : '轨道半长轴' }}</span>
-          <code>{{ ui.moon.a.toLocaleString('zh-CN') }} km</code>
+          <span>{{
+            ui.moon.estimate
+              ? pick('观测距离', 'Observed Distance')
+              : pick('轨道半长轴', 'Semi-Major Axis')
+          }}</span>
+          <code>{{ formatNum(ui.moon.a) }} km</code>
         </div>
         <div class="detail-row">
-          <span>公转周期</span>
-          <code>{{ ui.moon.period ? ui.moon.period + ' 天' : 'JPL 未列出' }}</code>
+          <span>{{ pick('公转周期', 'Orbital Period') }}</span>
+          <code>{{
+            ui.moon.period
+              ? ui.moon.period + pick(' 天', ' d')
+              : pick('JPL 未列出', 'Not listed')
+          }}</code>
         </div>
+        <div class="detail-row">
+          <span>{{ pick('发现年份', 'Discovered') }}</span>
+          <code>{{ moonDiscovered(ui.moon) }}</code>
+        </div>
+        <button
+          v-if="currentEntry && currentEntry.moon === ui.moon"
+          class="detail-archive-btn"
+          @click="emit('openArchive', currentEntry)"
+        >
+          <span>{{
+            currentEntry.probePhotos?.length
+              ? isEn
+                ? `View Spacecraft Photos (${currentEntry.probePhotos.length})`
+                : `查看探测器实拍与档案 (${currentEntry.probePhotos.length})`
+              : pick('查看卫星档案', 'View Moon Profile')
+          }}</span>
+        </button>
       </template>
     </div>
   </aside>

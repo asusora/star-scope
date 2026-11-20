@@ -11,6 +11,9 @@ import {
 } from './shaders'
 import { createAtmosphereMesh, type AtmosphereSpec } from './planetSurfaces'
 import { galaxyProfile, buildSoftwareVolume } from './galaxyVolume'
+import { locale, pick, type Locale } from '../i18n'
+import { deepLandmarkEn, exoHostEn } from '../i18n/catalogEn'
+import { localizedEntry } from '../i18n/archiveLocale'
 import type {
   GalaxyForm,
   PlanetSystem,
@@ -159,10 +162,11 @@ export function createDeepModels(
     d.volume.frustumCulled = false
     d.root.add(d.volume)
     // The companion, wind and jet are coordinates within the illustrative model.
+    const lm = (zh: string) => (locale.value === 'en' ? deepLandmarkEn[zh] ?? zh : zh)
     if (f.type === 1)
-      d.landmarks.push(['伴星系 NGC 5195', v3(11.7, 0.4, -3.2), tag('伴星系 NGC 5195')])
-    if (f.type === 3) d.landmarks.push(['星暴外流', v3(-1.7, 4.8, 0.1), tag('星暴外流')])
-    if (f.type === 4) d.landmarks.push(['中心喷流', v3(2.1, 0.46, 0.2), tag('中心喷流')])
+      d.landmarks.push(['伴星系 NGC 5195', v3(11.7, 0.4, -3.2), tag(lm('伴星系 NGC 5195'))])
+    if (f.type === 3) d.landmarks.push(['星暴外流', v3(-1.7, 4.8, 0.1), tag(lm('星暴外流'))])
+    if (f.type === 4) d.landmarks.push(['中心喷流', v3(2.1, 0.46, 0.2), tag(lm('中心喷流'))])
     map.ready.then(() => {
       if (!isActive(d) || !map.pixels) return
       const { data, width: w, height: h } = map.pixels,
@@ -386,7 +390,7 @@ export function createDeepModels(
     const primary = addStar(
       d,
       'main',
-      key === 'sirius' ? '天狼星 A' : d.entry.title,
+      key === 'sirius' ? pick('天狼星 A', 'Sirius A') : localizedEntry(d.entry).title,
       key === 'betelgeuse' ? 3.45 : 2.45,
       style,
     )
@@ -407,7 +411,7 @@ export function createDeepModels(
       primary.mesh.geometry = g
     }
     if (key === 'sirius') {
-      addStar(d, 'companion', '天狼星 B', 0.54, 'white')
+      addStar(d, 'companion', pick('天狼星 B', 'Sirius B'), 0.54, 'white')
       addOrbit(d, 3.75)
       addOrbit(d, 8.4)
       d.view = 'system'
@@ -430,7 +434,7 @@ export function createDeepModels(
         )
       }
       createLightField(d, dust)
-      d.landmarks.push(['尘埃盘', v3(-8.1, 0, 3.2), tag('尘埃盘')])
+      d.landmarks.push(['尘埃盘', v3(-8.1, 0, 3.2), tag(pick('尘埃盘', 'Debris Disk'))])
       d.view = 'system'
     } else if (key === 'proxima') makeFlares(primary, 822)
     else {
@@ -553,7 +557,8 @@ export function createDeepModels(
   function makePlanetSystem(d: DeepModel) {
     const id = d.entry.id
     const def = planetarySystems[id]
-    const host = addStar(d, 'host', def.host, 2.45, def.star)
+    const hostLabel = pick(def.host, exoHostEn[id] ?? def.host)
+    const host = addStar(d, 'host', hostLabel, 2.45, def.star)
     d.scene.add(new T.AmbientLight(0xc7d4fa, 0.22), new T.PointLight(0xfff0d7, 2.9, 0, 0))
     const surface = getSurface(id),
       gas = ['51-pegasi-b', 'hd-209458-b'].includes(id),
@@ -630,7 +635,7 @@ export function createDeepModels(
     }
     mat.customProgramCacheKey = () => 'exoplanet-surface-v2'
 
-    const planet = addSphere(d, 'main', d.entry.title, def.radius, mat, surface, null)
+    const planet = addSphere(d, 'main', localizedEntry(d.entry).title, def.radius, mat, surface, null)
     const exoSphere = new T.SphereGeometry(1, 128, 84)
     planet.mesh.geometry = exoSphere
     if (gas) planet.mesh.scale.y *= 0.945
@@ -685,6 +690,21 @@ export function createDeepModels(
 
     addOrbit(d, def.axis)
   }
+  function refreshLabels(d: DeepModel, lang: Locale) {
+    const id = d.entry.id
+    const title = localizedEntry(d.entry, lang).title
+    for (const b of d.bodies) {
+      let next = b.name
+      if (b.key === 'host' && d.system) next = pick(d.system.host, exoHostEn[id] ?? d.system.host, lang)
+      else if (b.key === 'main') next = id === 'sirius' ? pick('天狼星 A', 'Sirius A', lang) : title
+      else if (b.key === 'companion' && id === 'sirius') next = pick('天狼星 B', 'Sirius B', lang)
+      b.name = next
+      b.tag.textContent = next
+    }
+    for (const [key, , el] of d.landmarks) {
+      el.textContent = lang === 'en' ? deepLandmarkEn[key] ?? key : key
+    }
+  }
   function dispose() {
     disposed = true
     for (const surface of surfaceCache.values()) surface.texture?.dispose()
@@ -694,5 +714,5 @@ export function createDeepModels(
     surfaceCache.clear()
     glowMaps.clear()
   }
-  return { makeGalaxy, makePlanetSystem, makeStarSystem, getSurface, glowMap, dispose }
+  return { makeGalaxy, makePlanetSystem, makeStarSystem, refreshLabels, getSurface, glowMap, dispose }
 }

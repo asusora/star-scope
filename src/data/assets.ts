@@ -18,6 +18,9 @@ export const thumbs = byName(
 export const archivePhotos = byName(
   import.meta.glob('../assets/archive/*', { eager: true, query: '?url', import: 'default' }),
 )
+export const probePhotoSources = byName(
+  import.meta.glob('../assets/probe-photos/*', { eager: true, query: '?url', import: 'default' }),
+)
 export const surfaceSources = byName(
   import.meta.glob('../assets/surfaces/*', { eager: true, query: '?url', import: 'default' }),
 )

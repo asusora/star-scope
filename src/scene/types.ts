@@ -30,6 +30,7 @@ export class Moon {
   }
   numberName = ''
   label = ''
+  discovered = ''
   otherNames: string[] = []
   searchNames: string[] = []
   pos!: T.Vector3
@@ -70,6 +71,7 @@ export interface WorldDefinition {
   apoAU?: number
   kind?: string
   code?: string
+  discovered?: string
   summary?: string
   source?: string
   prominent?: boolean
@@ -102,6 +104,16 @@ export class World {
 }
 export const deepGroups = ['河外星系', '恒星', '系外行星'] as const
 export type Group = '太阳系' | (typeof deepGroups)[number]
+export interface ProbePhoto {
+  id: string
+  url: string
+  title: string
+  description: string
+  probe: string
+  date: string
+  credit: string
+  source: string
+}
 export interface ArchiveEntry {
   id: string
   title: string
@@ -110,10 +122,12 @@ export interface ArchiveEntry {
   body: string
   facts: string[][]
   source: string
+  discovered?: string
   photo?: string
   caption?: string
   credit?: string
   imageSource?: string
+  probePhotos?: ProbePhoto[]
   alt?: string
   object?: World
   moon?: Moon

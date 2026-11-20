@@ -1,4 +1,6 @@
 import { clamp, seeded } from '../math'
+import { locale, type Locale } from '../../i18n'
+import { landscapeRegionEn } from '../../i18n/catalogEn'
 
 export type TerrainKind = 'dust' | 'craters' | 'alpine' | 'lava' | 'ice' | 'cloud'
 type Palette = [ground: string, highlight: string, horizon: string, zenith: string, sun: string]
@@ -48,8 +50,14 @@ const rocky: [TerrainKind, string, Palette] = [
   '岩质荒原',
   ['#766f69', '#aaa49a', '#1c1c23', '#07080b', '#fff7e3'],
 ]
-export function landscape(id: string, name: string): Landscape {
-  const [kind, region, palette] =
+export function landscapeRegion(id: string, kind: TerrainKind, lang: Locale = locale.value): string {
+  if (lang === 'en') {
+    return landscapeRegionEn[id] ?? (kind === 'ice' ? 'Icy Plains' : 'Rocky Badlands')
+  }
+  return sites[id]?.[1] ?? (kind === 'ice' ? '冰质平原' : '岩质荒原')
+}
+export function landscape(id: string, name: string, lang: Locale = locale.value): Landscape {
+  const [kind, , palette] =
     sites[id] ??
     ([
       'Europa',
@@ -67,7 +75,7 @@ export function landscape(id: string, name: string): Landscape {
       : rocky)
   let seed = 5381
   for (const c of id) seed = (Math.imul(seed, 33) ^ c.charCodeAt(0)) >>> 0
-  return { id, name, kind, region, palette, seed }
+  return { id, name, kind, region: landscapeRegion(id, kind, lang), palette, seed }
 }
 export function rgb(hex: string) {
   const v = parseInt(hex.slice(1), 16)

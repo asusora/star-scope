@@ -252,7 +252,7 @@
       "name": "Themisto",
       "des": "S/1975 J1 = S/2000 J1",
       "num": "XVIII",
-      "year": null,
+      "year": 1975,
       "a": 7397000,
       "inc": 44.3,
       "period": 129.9681,
@@ -1536,7 +1536,7 @@
       "name": "Janus",
       "des": "S/1980 S1",
       "num": "X",
-      "year": null,
+      "year": 1966,
       "a": 151500,
       "inc": 0.2,
       "period": 0.697353,
@@ -1549,7 +1549,7 @@
       "name": "Epimetheus",
       "des": "S/1980 S3",
       "num": "XI",
-      "year": null,
+      "year": 1966,
       "a": 151400,
       "inc": 0.3,
       "period": 0.697012,
@@ -5082,7 +5082,7 @@
       "name": "Perdita",
       "des": "S/1986 U10",
       "num": "XXV",
-      "year": 1986,
+      "year": 1999,
       "a": 76418,
       "inc": 1.6,
       "period": 0.6382,
@@ -5222,7 +5222,7 @@
       "name": "Larissa",
       "des": "S/1989 N2",
       "num": "VII",
-      "year": 1989,
+      "year": 1981,
       "a": 73600,
       "inc": 0.2,
       "period": 0.5549,
@@ -5355,7 +5355,8 @@
       "a": 19600,
       "inc": 0,
       "node": 0,
-      "period": 6.387222
+      "period": 6.387222,
+      "year": 1978
     },
     {
       "name": "Nix",
@@ -5366,7 +5367,8 @@
       "a": 49300,
       "inc": 0,
       "node": 0,
-      "period": 24.85
+      "period": 24.85,
+      "year": 2005
     },
     {
       "name": "Hydra",
@@ -5377,7 +5379,8 @@
       "a": 65200,
       "inc": 0.3,
       "node": 114.3,
-      "period": 38.2
+      "period": 38.2,
+      "year": 2005
     },
     {
       "name": "Kerberos",
@@ -5388,7 +5391,8 @@
       "a": 58300,
       "inc": 0.4,
       "node": 314.3,
-      "period": 32.17
+      "period": 32.17,
+      "year": 2011
     },
     {
       "name": "Styx",
@@ -5399,7 +5403,8 @@
       "a": 43200,
       "inc": 0,
       "node": 0,
-      "period": 20.16
+      "period": 20.16,
+      "year": 2012
     }
   ],
   "Haumea": [
@@ -5412,7 +5417,8 @@
       "inc": 126.356,
       "node": 206.766,
       "w": 154.1,
-      "frame": "ecliptic"
+      "frame": "ecliptic",
+      "year": 2005
     },
     {
       "name": "Namaka",
@@ -5423,7 +5429,8 @@
       "inc": 113.013,
       "node": 205,
       "w": 178.9,
-      "frame": "ecliptic"
+      "frame": "ecliptic",
+      "year": 2005
     }
   ],
   "Makemake": [
@@ -5436,7 +5443,8 @@
       "inc": 0,
       "node": 0,
       "w": 0,
-      "frame": "illustrative"
+      "frame": "illustrative",
+      "year": 2015
     }
   ],
   "Eris": [
@@ -5449,7 +5457,8 @@
       "inc": 61.59,
       "node": 139.12,
       "w": 0,
-      "frame": "ecliptic"
+      "frame": "ecliptic",
+      "year": 2005
     }
   ],
   "Eurybates": [

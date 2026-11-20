@@ -123,6 +123,12 @@ function norm3(x: number, y: number, z: number): [number, number, number] {
   return [x / l, y / l, z / l]
 }
 
+// The sub-planet meridian falls at u=0.5 in the Cassini maps used here.
+function mappedCrater(westLongitude: number, latitude: number): [number, number, number] {
+  const lon = westLongitude * Math.PI / 180, lat = latitude * Math.PI / 180
+  return [Math.cos(lon) * Math.cos(lat), Math.sin(lat), Math.sin(lon) * Math.cos(lat)]
+}
+
 // Fast deterministic 3D lattice value noise with quintic interpolation (zero allocations).
 function hash3(ix: number, iy: number, iz: number, seed: number): number {
   let n =
@@ -1546,7 +1552,7 @@ const curatedSpecs: Record<string, BodyDetailSpec> = {
     specialCraters: [
       // Iconic "Death Star" Herschel Crater — 1/3 the diameter of Mimas!
       {
-        dir: norm3(0.91, 0.06, 0.41),
+        dir: mappedCrater(111.76, -1.38),
         radius: 0.44,
         depth: 0.115,
         peak: 0.044,
@@ -1583,7 +1589,7 @@ const curatedSpecs: Record<string, BodyDetailSpec> = {
     geoCraterCount: 14,
     specialCraters: [
       // Turgis mega-basin (580km across) in the dark Cassini Regio
-      { dir: norm3(0.68, 0.32, 0.66), radius: 0.36, depth: 0.072, rim: 0.35 },
+      { dir: mappedCrater(28.40, 16.90), radius: 0.36, depth: 0.072, rim: 0.35 },
       // Engelier basin in the bright south
       { dir: norm3(-0.55, -0.64, -0.53), radius: 0.34, depth: 0.068, rim: 0.34 },
       // Falsaron basin
@@ -1615,7 +1621,7 @@ const curatedSpecs: Record<string, BodyDetailSpec> = {
     geoCraterCount: 12,
     specialCraters: [
       // Odysseus giant 450km crater
-      { dir: norm3(0.7, 0.54, 0.46), radius: 0.42, depth: 0.074, peak: 0.022, rim: 0.36 },
+      { dir: mappedCrater(128.89, 32.82), radius: 0.42, depth: 0.074, peak: 0.022, rim: 0.36 },
       { dir: norm3(-0.55, -0.25, 0.8), radius: 0.2, depth: 0.036, rim: 0.28 },
     ],
     texCraterCount: 140,
@@ -2687,6 +2693,24 @@ export function buildDetailedBodyGeometry(
   }
 
   geo.computeVertexNormals()
+  if (tier === 'close') {
+    // The UV seam and pole fans duplicate vertices. Give coincident points the same lighting.
+    const normals = geo.getAttribute('normal')
+    const [columns, rows] = segs
+    const sum = new T.Vector3(), sample = new T.Vector3()
+    for (let row = 0; row <= rows; row++) {
+      const first = row * (columns + 1)
+      const stride = row === 0 || row === rows ? 1 : columns
+      sum.set(0, 0, 0)
+      for (let col = 0; col <= columns; col += stride) {
+        sum.add(sample.fromBufferAttribute(normals, first + col))
+      }
+      sum.normalize()
+      for (let col = 0; col <= columns; col += stride) {
+        normals.setXYZ(first + col, sum.x, sum.y, sum.z)
+      }
+    }
+  }
   return geo
 }
 
@@ -2733,6 +2757,8 @@ export interface SynthesizedMaps {
   specular: T.CanvasTexture | null
   emissive: T.CanvasTexture | null
   albedoPixels?: ImageData
+  normalPixels?: ImageData
+  emissivePixels?: ImageData
   dispose: () => void
 }
 
@@ -3600,11 +3626,12 @@ function processRow(ctx: SynthesisContext, y: number) {
   }
 }
 
-function finishPixels(ctx: SynthesisContext) {
+function finishPixels(ctx: SynthesisContext, closeRelief = false) {
   const { width, height, heightField, spec } = ctx
   const normal = new ImageData(width, height)
   const nData = normal.data
   const strength = spec.normalStrength * (width / 512) * 1.45
+  const span = Math.max(1, Math.round(height / 96))
 
   for (let y = 0; y < height; y++) {
     const yUp = y > 0 ? y - 1 : 0
@@ -3613,6 +3640,9 @@ function finishPixels(ctx: SynthesisContext) {
     const rowOff = y * width
     const upOff = yUp * width
     const dnOff = yDn * width
+    const north = Math.max(0, y - span) * width
+    const south = Math.min(height - 1, y + span) * width
+    const east = Math.round(span / sinTheta)
     for (let x = 0; x < width; x++) {
       const xL = x === 0 ? width - 1 : x - 1
       const xR = x === width - 1 ? 0 : x + 1
@@ -3622,13 +3652,24 @@ function finishPixels(ctx: SynthesisContext) {
       const hD = heightField[dnOff + x]
       // Compensate equirectangular horizontal stretching near poles
       const dx = ((hR - hL) * strength) / sinTheta
-      const dy = (hD - hU) * strength * 2.0
+      // In a 2:1 close-up map a meridional texel spans the same angle as an equatorial texel.
+      const dy = (hD - hU) * strength * (closeRelief ? 2 * height / width : 2)
       const inv = 1 / Math.hypot(dx, dy, 1)
       const o4 = (rowOff + x) * 4
       nData[o4] = Math.round((-dx * inv * 0.5 + 0.5) * 255)
       nData[o4 + 1] = Math.round((dy * inv * 0.5 + 0.5) * 255)
       nData[o4 + 2] = Math.round((inv * 0.5 + 0.5) * 255)
       nData[o4 + 3] = 255
+      if (closeRelief) {
+        // Bake soft cavity shading from the same terrain as the normals. Opposing samples
+        // cancel on a planar slope and darken sheltered crater floors and ice fractures.
+        const center = heightField[rowOff + x]
+        const across = heightField[rowOff + (x + width - east) % width] +
+          heightField[rowOff + (x + east) % width] - 2 * center
+        const along = heightField[north + x] + heightField[south + x] - 2 * center
+        const shade = 1 - Math.min(0.28, (Math.max(0, across) + Math.max(0, along)) * 0.52)
+        for (let c = 0; c < 3; c++) ctx.albedoData[o4 + c] *= shade
+      }
     }
   }
   return {
@@ -3640,16 +3681,17 @@ function finishPixels(ctx: SynthesisContext) {
 }
 
 export interface MapRequest {
+  closeRelief?: boolean
   spec: BodyDetailSpec
   width: number
   height: number
   basePixels: ImageData | null
   includeSpecular: boolean
 }
-export function synthesizePixels({ spec, width, height, basePixels, includeSpecular }: MapRequest) {
+export function synthesizePixels({ spec, width, height, basePixels, includeSpecular, closeRelief }: MapRequest) {
   const ctx = createSynthesisContext(spec, width, height, basePixels, includeSpecular)
   for (let y = 0; y < height; y++) processRow(ctx, y)
-  return finishPixels(ctx)
+  return finishPixels(ctx, closeRelief)
 }
 
 export function texturesFromPixels(
@@ -3678,6 +3720,8 @@ export function texturesFromPixels(
     specular,
     emissive,
     albedoPixels: keepPixels ? pixels.albedo : undefined,
+    normalPixels: keepPixels ? pixels.normal : undefined,
+    emissivePixels: keepPixels ? pixels.emissive ?? undefined : undefined,
     dispose() {
       albedo.dispose()
       normal.dispose()
@@ -3698,6 +3742,7 @@ export function synthesizeBodyMapsAsync(
   options: {
     basePixels?: ImageData | null
     includeSpecular?: boolean
+    closeRelief?: boolean
     maxAnisotropy?: number
     keepPixels?: boolean
     budgetMs?: number
@@ -3727,7 +3772,7 @@ export function synthesizeBodyMapsAsync(
       timer = window.setTimeout(step, 0)
       return
     }
-    const maps = texturesFromPixels(finishPixels(ctx), aniso, !!options.keepPixels)
+    const maps = texturesFromPixels(finishPixels(ctx, options.closeRelief), aniso, !!options.keepPixels)
     if (cancelled) {
       maps.dispose()
       return

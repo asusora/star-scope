@@ -1,5 +1,5 @@
 import * as T from 'three'
-import { ringInner, ringOuter } from './planetSurfaces'
+import { cloudBand, earthCloudRadius, ringInner, ringOuter } from './planetSurfaces'
 import type { PlanetBody, SurfacePixels } from './planetDetail'
 import type { ScreenPoint } from './types'
 
@@ -43,6 +43,8 @@ export function createPlanetCanvas() {
   const frame = new T.Matrix4(),
     localLight = new T.Vector3()
   let raster: ImageData | undefined
+  let jetBands = new Float32Array(0)
+  let bandBody = ''
   return function draw(
     ctx: CanvasRenderingContext2D,
     body: PlanetBody,
@@ -95,6 +97,14 @@ export function createPlanetCanvas() {
     const c = ox * ox + oy * oy * invP2 + oz * oz - 1
     const cloudShift = ((body.clouds?.rotation.y ?? 0) - body.mesh.rotation.y) / tau
     const earth = body.id === 'Earth'
+    const cloudShellDelta = earthCloudRadius ** 2 - 1
+    const cloudRayLengthSq = lx * lx + ly * ly * invP2 + lz * lz
+    const drift = (body.mesh.material as T.MeshPhongMaterial).userData.cloudDrift?.value ?? 0
+    if (drift && (bandBody !== body.id || jetBands.length !== surface.height)) {
+      jetBands = Float32Array.from({ length: surface.height }, (_, row) =>
+        cloudBand(body.id, 1 - (row + 0.5) / surface.height))
+      bandBody = body.id
+    }
     const rimRgb = canvasRims[body.id]
     for (let row = 0; row < sh; row++) {
       const cy = (1 - (2 * (top + ((row + 0.5) * h) / sh)) / height + projection[9]) / projection[5]
@@ -127,7 +137,17 @@ export function createPlanetCanvas() {
             v = Math.acos(Math.max(-1, Math.min(1, y / polar))) / Math.PI
           const j = sample(surface, u, v),
             rgb = surface.data
-          let light = Math.sqrt((earth ? 0.008 : 0.044) + 0.92 * Math.max(0, cosine))
+          let diffuse = cosine
+          if (maps.normal && cosine > 0) {
+            const k = sample(maps.normal, u, v), normal = maps.normal.data
+            const east = (normal[k] / 127.5 - 1) * 0.92
+            const north = (normal[k + 1] / 127.5 - 1) * 0.92
+            const up = normal[k + 2] / 127.5 - 1
+            const horizontal = Math.max(1e-6, Math.hypot(nx, nz))
+            diffuse = (east * (nz * lx - nx * lz) / horizontal +
+              north * (ly - ny * cosine) / horizontal + up * cosine) / Math.hypot(east, north, up)
+          }
+          let light = Math.sqrt((earth ? 0.008 : 0.044) + 0.92 * Math.max(0, diffuse))
           if (maps.ring && Math.abs(ly) > 0.0001) {
             const t = -y / ly,
               r = Math.hypot(x + t * lx, z + t * lz)
@@ -137,7 +157,22 @@ export function createPlanetCanvas() {
           red = rgb[j] * light
           green = rgb[j + 1] * light
           blue = rgb[j + 2] * light
+          if (drift) {
+            const band = jetBands[Math.floor(j / (4 * surface.width))]
+            const k = sample(surface, u - Math.sign(band) * drift, v)
+            const weight = Math.abs(band) * light
+            red += (rgb[k] - rgb[j]) * weight
+            green += (rgb[k + 1] - rgb[j + 1]) * weight
+            blue += (rgb[k + 2] - rgb[j + 2]) * weight
+          }
           alpha = 1
+          if (maps.emission) {
+            const k = sample(maps.emission, u, v)
+            const glow = 1 - 0.78 * T.MathUtils.smoothstep(cosine, -0.22, 0.16)
+            red += maps.emission.data[k] * glow
+            green += maps.emission.data[k + 1] * glow
+            blue += maps.emission.data[k + 2] * glow
+          }
           if (earth) {
             const invView = 1 / Math.hypot(dx, dy, dz)
             const vx = -dx * invView,
@@ -154,6 +189,20 @@ export function createPlanetCanvas() {
               red += glint
               green += glint
               blue += glint
+            }
+            if (maps.clouds && cosine > 0) {
+              const along = x * lx + y * ly * invP2 + z * lz
+              const t = cloudShellDelta / (Math.sqrt(along * along + cloudRayLengthSq * cloudShellDelta) + along)
+              const shadowU = Math.atan2(z + t * lz, -(x + t * lx)) / tau - cloudShift
+              const shadowV = Math.acos(T.MathUtils.clamp((y + t * ly) / (polar * earthCloudRadius), -1, 1)) / Math.PI
+              const cloud = maps.clouds.data[sample(maps.clouds, shadowU, shadowV)] / 255
+              const transmission = 1 - 0.62 * T.MathUtils.smoothstep(cloud, 0.04, 0.92) *
+                T.MathUtils.smoothstep(cosine, -0.03, 0.14)
+              // Pixel colors here are display-encoded, unlike the linear-light WebGL material.
+              const shade = Math.sqrt(transmission)
+              red *= shade
+              green *= shade
+              blue *= shade
             }
             if (maps.night && cosine < 0.12) {
               const n = sample(maps.night, u, v),
@@ -185,8 +234,9 @@ export function createPlanetCanvas() {
               z = oz + t * dz,
               r = Math.hypot(x, z)
             if (r >= ringInner && r <= ringOuter) {
-              const j = ringSample(maps.ring, r),
-                opacity = maps.ring.data[j + 3] / 255
+              const j = ringSample(maps.ring, r)
+              const opening = Math.abs(dy) / Math.hypot(dx, dy, dz)
+              const opacity = 1 - (1 - maps.ring.data[j + 3] / 255) ** (1 / Math.max(0.32, opening))
               const along = Math.max(0, -(x * lx + z * lz) / (lx * lx + ly * ly * invP2 + lz * lz))
               const shadow =
                 Math.hypot(x + along * lx, (along * ly) / polar, z + along * lz) < 1 ? 0.35 : 1

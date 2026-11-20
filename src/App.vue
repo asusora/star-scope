@@ -7,6 +7,7 @@ import {
   shallowRef,
   useTemplateRef,
   ref,
+  watch,
 } from 'vue'
 import NavigationDock from './components/NavigationDock.vue'
 import BodyDrawer from './components/BodyDrawer.vue'
@@ -15,6 +16,16 @@ import GuideDialog from './components/GuideDialog.vue'
 import SurfaceHud from './components/SurfaceHud.vue'
 import { createAtlas, type Atlas } from './scene/atlas'
 import { createSceneUI } from './scene/ui'
+import {
+  formatNum,
+  groupLabel,
+  isEn,
+  locale,
+  pick,
+  toggleLocale,
+} from './i18n'
+import { worldKind } from './i18n/catalogEn'
+import { localizedEntry } from './i18n/archiveLocale'
 
 const ui = createSceneUI(),
   atlas = shallowRef<Atlas | null>(null)
@@ -32,6 +43,10 @@ let noticeTimer: number | undefined
 function onFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement
 }
+
+watch(locale, (lang) => {
+  atlas.value?.setLocale(lang)
+})
 
 onMounted(() => {
   atlas.value = createAtlas(
@@ -58,15 +73,37 @@ async function toggleFullscreen() {
     if (document.fullscreenElement) await document.exitFullscreen()
     else await document.documentElement.requestFullscreen()
   } catch {
-    notice.value = '当前窗口无法进入全屏。'
+    notice.value = pick(
+      '当前窗口无法进入全屏。',
+      'Fullscreen is unavailable in this window.',
+    )
     window.clearTimeout(noticeTimer)
     noticeTimer = window.setTimeout(() => (notice.value = ''), 2200)
   }
 }
 
 const note = computed(() => ui.notes[ui.noteIndex])
+const currentSolarEntry = computed(() => {
+  const a = atlas.value
+  if (!a || ui.galaxy || ui.deepEntry || ui.region || !ui.planet) return null
+  const id = ui.moon ? `${ui.planet.id}-${ui.moon.name}` : ui.planet.id
+  return a.entries.find((e) => e.id === id) ?? null
+})
+const noteEntry = computed(() => ui.deepEntry ?? currentSolarEntry.value)
+const noteEntryView = computed(() => (noteEntry.value ? localizedEntry(noteEntry.value) : null))
+const deepEntryView = computed(() => (ui.deepEntry ? localizedEntry(ui.deepEntry) : null))
+
 const sourceName = computed(() => {
   const url = note.value?.source ?? ''
+  if (isEn.value) {
+    return url.includes('nasa.gov')
+      ? 'NASA Data'
+      : url.includes('eso.org')
+        ? 'ESO Data'
+        : url.includes('harvard.edu')
+          ? 'IAU Circular'
+          : 'Orbital Study'
+  }
   return url.includes('nasa.gov')
     ? 'NASA 资料'
     : url.includes('eso.org')
@@ -76,17 +113,64 @@ const sourceName = computed(() => {
         : '轨道研究'
 })
 
-const regionMeta: Record<string, { mode: string; code: string; telemetry: string }> = {
-  main: { mode: '主小行星带', code: 'MAIN BELT', telemetry: '火星至木星间 · 含希尔达族 2.1–4.0 AU' },
-  trojan: { mode: '木星特洛伊群', code: 'JUPITER TROJANS', telemetry: '木星轨道 L4/L5 共轨云 · 5.2 AU' },
-  centaur: { mode: '半人马小天体带', code: 'CENTAUR BELT', telemetry: '巨行星轨道之间 · 5.5–30 AU' },
-  outer: { mode: '柯伊伯带区域', code: 'KUIPER BELT', telemetry: '海王星外冰质盘 · 30–50 AU' },
-  scattered: {
-    mode: '离散盘与内奥尔特云',
-    code: 'SCATTERED & OORT',
-    telemetry: '极远分离天体区 · 50–1000 AU',
-  },
-}
+const regionMeta = computed<Record<string, { mode: string; code: string; telemetry: string }>>(
+  () =>
+    isEn.value
+      ? {
+          main: {
+            mode: 'Main Asteroid Belt',
+            code: 'MAIN BELT',
+            telemetry: 'Mars–Jupiter · incl. Hilda 2.1–4.0 AU',
+          },
+          trojan: {
+            mode: 'Jupiter Trojans',
+            code: 'JUPITER TROJANS',
+            telemetry: 'L4/L5 Co-orbital Clouds · 5.2 AU',
+          },
+          centaur: {
+            mode: 'Centaur Belt',
+            code: 'CENTAUR BELT',
+            telemetry: 'Between Giant Planets · 5.5–30 AU',
+          },
+          outer: {
+            mode: 'Kuiper Belt',
+            code: 'KUIPER BELT',
+            telemetry: 'Trans-Neptunian Ice Disk · 30–50 AU',
+          },
+          scattered: {
+            mode: 'Scattered Disc & Inner Oort',
+            code: 'SCATTERED & OORT',
+            telemetry: 'Extreme Detached Zone · 50–1000 AU',
+          },
+        }
+      : {
+          main: {
+            mode: '主小行星带',
+            code: 'MAIN BELT',
+            telemetry: '火星至木星间 · 含希尔达族 2.1–4.0 AU',
+          },
+          trojan: {
+            mode: '木星特洛伊群',
+            code: 'JUPITER TROJANS',
+            telemetry: '木星轨道 L4/L5 共轨云 · 5.2 AU',
+          },
+          centaur: {
+            mode: '半人马小天体带',
+            code: 'CENTAUR BELT',
+            telemetry: '巨行星轨道之间 · 5.5–30 AU',
+          },
+          outer: {
+            mode: '柯伊伯带区域',
+            code: 'KUIPER BELT',
+            telemetry: '海王星外冰质盘 · 30–50 AU',
+          },
+          scattered: {
+            mode: '离散盘与内奥尔特云',
+            code: 'SCATTERED & OORT',
+            telemetry: '极远分离天体区 · 50–1000 AU',
+          },
+        },
+)
 
 const totalMoons = computed(() => {
   const a = atlas.value
@@ -95,12 +179,15 @@ const totalMoons = computed(() => {
 })
 
 const hudModeTag = computed(() => {
-  if (ui.deepEntry) return '深空三维观测'
-  if (ui.galaxy) return '银河宏观尺度'
-  if (ui.moon) return '卫星近距追踪'
-  if (ui.planet) return ui.planet.kind ? ui.planet.kind + '轨道' : '行星近距轨道'
-  if (ui.region) return regionMeta[ui.region]?.mode ?? '外太阳系区域'
-  return '太阳系轨道图鉴'
+  if (ui.deepEntry) return pick('深空三维观测', 'Deep-Sky 3D View')
+  if (ui.galaxy) return pick('银河宏观尺度', 'Galactic Scale')
+  if (ui.moon) return pick('卫星近距追踪', 'Moon Tracking')
+  if (ui.planet) {
+    if (isEn.value) return `${worldKind(ui.planet, 'en')} Orbit`
+    return ui.planet.kind ? ui.planet.kind + '轨道' : '行星近距轨道'
+  }
+  if (ui.region) return regionMeta.value[ui.region]?.mode ?? pick('外太阳系区域', 'Outer Region')
+  return pick('太阳系轨道图鉴', 'Solar System Atlas')
 })
 
 const hudCode = computed(() => {
@@ -108,18 +195,34 @@ const hudCode = computed(() => {
   if (ui.galaxy) return 'MILKY WAY'
   if (ui.moon) return ui.moon.name.toUpperCase()
   if (ui.planet) return (ui.planet.code ?? ui.planet.id).toUpperCase()
-  if (ui.region) return regionMeta[ui.region]?.code ?? 'SOLAR BELT'
+  if (ui.region) return regionMeta.value[ui.region]?.code ?? 'SOLAR BELT'
   return 'SOL SYSTEM'
 })
 
 const hudTelemetry = computed(() => {
-  if (ui.deepEntry) return ui.deepEntry.group
-  if (ui.galaxy) return '猎户支臂 · 距银心 2.6 万光年'
+  if (ui.deepEntry) return groupLabel(ui.deepEntry.group)
+  if (ui.galaxy) return pick('猎户支臂 · 距银心 2.6 万光年', 'Orion Spur · 26,000 ly from Center')
   if (ui.moon) {
-    const axis = ui.moon.a.toLocaleString('zh-CN') + ' km'
+    const axis = formatNum(ui.moon.a) + ' km'
+    if (isEn.value) {
+      return ui.moon.period
+        ? `a ${axis} · Period ${ui.moon.period} d`
+        : `Obs. Distance ${axis}`
+    }
     return ui.moon.period ? `半长轴 ${axis} · 周期 ${ui.moon.period} 天` : `观测距离 ${axis}`
   }
   if (ui.planet) {
+    if (isEn.value) {
+      const period =
+        ui.planet.days > 3652
+          ? (ui.planet.days / 365.25).toFixed(ui.planet.days > 36525 ? 0 : 1) + ' yr'
+          : formatNum(Math.round(ui.planet.days), 'en') + ' d'
+      const au = ui.planet.au
+        ? `${ui.planet.au >= 100 ? Math.round(ui.planet.au) : ui.planet.au.toFixed(1)} AU · `
+        : ''
+      const mCount = ui.planet.moons.length
+      return `${au}Orbit ${period} · ${mCount} ${mCount === 1 ? 'Moon' : 'Moons'}`
+    }
     const days =
       ui.planet.days > 3652
         ? (ui.planet.days / 365.25).toFixed(ui.planet.days > 36525 ? 0 : 1) + ' 年'
@@ -129,31 +232,49 @@ const hudTelemetry = computed(() => {
       : ''
     return `${au}公转 ${days} · 卫星 ${ui.planet.moons.length}`
   }
-  if (ui.region) return regionMeta[ui.region]?.telemetry ?? ''
+  if (ui.region) return regionMeta.value[ui.region]?.telemetry ?? ''
   const smallCount = atlas.value?.smallBodies.length ?? 22
-  return `8 行星 · ${smallCount} 矮行星/小天体 · 5 天体带 · ${totalMoons.value} 卫星`
+  return isEn.value
+    ? `8 Planets · ${smallCount} Minor Bodies · 5 Belts · ${totalMoons.value} Moons`
+    : `8 行星 · ${smallCount} 矮行星/小天体 · 5 天体带 · ${totalMoons.value} 卫星`
 })
 </script>
 <template>
   <main
     :class="{ 'notes-open': ui.notesOpen, 'dock-open': ui.dockOpen, 'on-surface': !!ui.landing }"
   >
-    <section id="stage" ref="stage" aria-label="三维星空">
+    <section id="stage" ref="stage" :aria-label="pick('三维星空', '3D Sky Canvas')">
       <canvas
         ref="canvas"
         id="space"
         :tabindex="ui.landing ? -1 : 0"
         :aria-hidden="ui.landing ? true : undefined"
         :aria-label="
-          ui.deepEntry
-            ? ui.deepEntry.title + '三维示意，拖动旋转，滚轮缩放。'
-            : '交互式三维太阳系。方向键旋转，加减键缩放，Home 键复位。'
+          deepEntryView
+            ? isEn
+              ? `${deepEntryView.title} 3D model. Drag to orbit, scroll to zoom.`
+              : deepEntryView.title + '三维示意，拖动旋转，滚轮缩放。'
+            : pick(
+                '交互式三维太阳系。方向键旋转，加减键缩放，Home 键复位。',
+                'Interactive 3D Solar System. Arrow keys to orbit, +/- to zoom, Home to reset.',
+              )
         "
-        >请使用支持 Canvas 的浏览器查看太阳系。</canvas
+        >{{
+          pick(
+            '请使用支持 Canvas 的浏览器查看太阳系。',
+            'Please use a browser with Canvas support to explore the Solar System.',
+          )
+        }}</canvas
       >
       <div ref="tags" id="tags" aria-hidden="true"></div>
       <h1 class="sr-only" id="title" aria-live="polite">
-        {{ ui.landing ? ui.landing.name + (ui.landing.cloud ? '云层观测' : '地表漫游') : ui.title }}
+        {{
+          ui.landing
+            ? isEn
+              ? `${ui.landing.name} ${ui.landing.cloud ? 'Cloud Flight' : 'Surface Excursion'}`
+              : ui.landing.name + (ui.landing.cloud ? '云层观测' : '地表漫游')
+            : ui.title
+        }}
       </h1>
 
       <header id="hudBrand" aria-hidden="true">
@@ -164,19 +285,25 @@ const hudTelemetry = computed(() => {
           <span class="hud-mode">{{ hudModeTag }}</span>
         </div>
         <div class="hud-title-row">
-          <strong class="hud-title">{{ ui.deepEntry ? ui.deepEntry.title : ui.title }}</strong>
+          <strong class="hud-title">{{ deepEntryView ? deepEntryView.title : ui.title }}</strong>
           <span class="hud-code">{{ hudCode }}</span>
         </div>
         <div class="hud-meta">
           <span class="hud-chip">{{ hudTelemetry }}</span>
           <span class="hud-chip hud-state" :class="{ paused: !ui.playing }">
-            {{ ui.playing ? `实时 ${ui.speed}×` : '已暂停' }}
+            {{
+              ui.playing
+                ? isEn
+                  ? `LIVE ${ui.speed}×`
+                  : `实时 ${ui.speed}×`
+                : pick('已暂停', 'PAUSED')
+            }}
           </span>
         </div>
       </header>
 
       <div class="sky-tools">
-        <div class="scale-switch" role="group" aria-label="观察尺度">
+        <div class="scale-switch" role="group" :aria-label="pick('观察尺度', 'View Scale')">
           <button
             id="solarTab"
             :aria-pressed="!ui.deepEntry && !ui.galaxy"
@@ -186,7 +313,7 @@ const hudTelemetry = computed(() => {
               <circle cx="8" cy="8" r="2.2" fill="currentColor" />
               <ellipse cx="8" cy="8" rx="6.5" ry="3.2" transform="rotate(-24 8 8)" stroke="currentColor" stroke-width="1.25" />
             </svg>
-            <span>太阳系</span></button
+            <span>{{ pick('太阳系', 'Solar') }}</span></button
           ><button
             id="galaxyTab"
             :aria-pressed="!ui.deepEntry && ui.galaxy"
@@ -207,7 +334,7 @@ const hudTelemetry = computed(() => {
                 stroke-linecap="round"
               />
             </svg>
-            <span>银河系</span>
+            <span>{{ pick('银河系', 'Milky Way') }}</span>
           </button>
         </div>
         <button
@@ -221,7 +348,7 @@ const hudTelemetry = computed(() => {
             <path d="M5 6h6M5 8.8h4.2M5 11.4h2.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
             <circle cx="11.2" cy="10.4" r="1" fill="currentColor" />
           </svg>
-          <span>深空档案</span></button
+          <span>{{ pick('星图档案', 'Archive') }}</span></button
         ><button
           id="notes"
           :aria-pressed="ui.notesOpen"
@@ -233,12 +360,20 @@ const hudTelemetry = computed(() => {
             <path d="M8 7.2v3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
             <circle cx="8" cy="4.9" r="0.85" fill="currentColor" />
           </svg>
-          <span>注释</span></button
+          <span>{{ pick('注释', 'Notes') }}</span></button
+        ><button
+          id="langToggle"
+          class="lang-btn"
+          :title="pick('Switch to English', '切换为简体中文')"
+          :aria-label="pick('Switch to English', '切换为简体中文')"
+          @click="toggleLocale()"
+        >
+          <span>{{ isEn ? '中文' : 'EN' }}</span></button
         ><button
           class="tool-icon"
           id="help"
-          title="使用说明"
-          aria-label="使用说明"
+          :title="pick('使用说明', 'User Guide')"
+          :aria-label="pick('使用说明', 'User Guide')"
           @click="guide?.open()"
         >
           <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -253,8 +388,8 @@ const hudTelemetry = computed(() => {
         ><button
           class="tool-icon"
           id="fullscreen"
-          title="切换全屏"
-          aria-label="切换全屏"
+          :title="pick('切换全屏', 'Toggle Fullscreen')"
+          :aria-label="pick('切换全屏', 'Toggle Fullscreen')"
           :hidden="!canFullscreen"
           @click="toggleFullscreen"
         >
@@ -277,15 +412,15 @@ const hudTelemetry = computed(() => {
         </button>
       </div>
       <div ref="pins" id="pins"></div>
-      <section id="deepHUD" aria-label="深空三维观测" :hidden="!ui.deepEntry">
+      <section id="deepHUD" :aria-label="pick('深空三维观测', 'Deep-Sky 3D View')" :hidden="!ui.deepEntry">
         <div class="deep-caption">
           <span class="deep-dot" aria-hidden="true"></span>
           <span id="deepClass">{{ ui.deepClass }}</span><i></i
           ><span id="deepCode">{{ ui.deepEntry?.code }}</span>
         </div>
-        <h2 id="deepName">{{ ui.deepEntry?.title }}</h2>
+        <h2 id="deepName">{{ deepEntryView?.title }}</h2>
         <div class="deep-controls">
-          <div id="deepPresets" role="group" aria-label="观测视角">
+          <div id="deepPresets" role="group" :aria-label="pick('观测视角', 'View Presets')">
             <button
               v-for="[mode, label] in ui.presets"
               :key="mode"
@@ -297,17 +432,25 @@ const hudTelemetry = computed(() => {
             </button>
           </div>
           <button id="deepSource" @click="ui.deepEntry && archive?.open(ui.deepEntry)">
-            <span>原图与资料</span>
+            <span>{{ pick('原图与资料', 'Photos & Info') }}</span>
             <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M4.5 9.5l5-5M5.5 4.5h4v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
           <div class="deep-step">
-            <button id="deepPrev" aria-label="上一个三维天体" @click="atlas?.switchDeepTarget(-1)">
+            <button
+              id="deepPrev"
+              :aria-label="pick('上一个三维天体', 'Previous 3D target')"
+              @click="atlas?.switchDeepTarget(-1)"
+            >
               <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M10 3.8L5.8 8 10 12.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
               </svg></button
-            ><button id="deepNext" aria-label="下一个三维天体" @click="atlas?.switchDeepTarget(1)">
+            ><button
+              id="deepNext"
+              :aria-label="pick('下一个三维天体', 'Next 3D target')"
+              @click="atlas?.switchDeepTarget(1)"
+            >
               <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path d="M6 3.8L10.2 8 6 12.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
@@ -321,26 +464,61 @@ const hudTelemetry = computed(() => {
         :status="ui.landing"
         @exit="returnToOrbit"
       />
-      <BodyDrawer v-if="atlas" :atlas="atlas" :ui="ui" />
-      <aside id="noteCard" :hidden="!ui.notesOpen" aria-label="天文注释">
-        <div class="note-kicker">TELEMETRY // 天文注释</div>
+      <BodyDrawer
+        v-if="atlas"
+        :atlas="atlas"
+        :ui="ui"
+        :current-entry="currentSolarEntry"
+        @open-archive="archive?.open($event)"
+      />
+      <aside id="noteCard" :hidden="!ui.notesOpen" :aria-label="pick('天文注释', 'Astronomy Notes')">
+        <div class="note-kicker">{{ pick('TELEMETRY // 天文注释', 'TELEMETRY // ASTRONOMY NOTES') }}</div>
         <div class="note-head">
           <h2 id="noteTitle">{{ note?.name }}</h2>
-          <button id="closeNotes" aria-label="收起注释" @click="atlas?.setNotes(false)">
+          <button
+            id="closeNotes"
+            :aria-label="pick('收起注释', 'Close Notes')"
+            @click="atlas?.setNotes(false)"
+          >
             <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
             </svg>
           </button>
         </div>
+        <div v-if="noteEntryView?.discovered || noteEntry?.probePhotos?.length" class="note-meta">
+          <span v-if="noteEntryView?.discovered" class="note-pill">
+            {{ isEn ? `Discovered · ${noteEntryView.discovered}` : `发现年份 · ${noteEntryView.discovered}` }}
+          </span>
+          <span v-if="noteEntry?.probePhotos?.length" class="note-pill is-probe">
+            {{
+              isEn
+                ? `Spacecraft Photos · ${noteEntry.probePhotos.length}`
+                : `探测器实拍 · ${noteEntry.probePhotos.length} 张`
+            }}
+          </span>
+        </div>
         <p id="noteText">{{ note?.body }}</p>
         <div class="note-foot">
-          <a id="noteSource" :href="note?.source" target="_blank" rel="noopener"
-            >{{ sourceName }} ↗</a
-          >
+          <div class="note-links">
+            <a id="noteSource" :href="note?.source" target="_blank" rel="noopener"
+              >{{ sourceName }} ↗</a
+            >
+            <button
+              v-if="currentSolarEntry"
+              class="note-archive"
+              @click="archive?.open(currentSolarEntry)"
+            >
+              {{
+                currentSolarEntry.probePhotos?.length
+                  ? pick('实拍与档案', 'Photos & Info')
+                  : pick('查看档案', 'View Profile')
+              }}
+            </button>
+          </div>
           <div id="notePages" :hidden="ui.notes.length < 2">
             <button
               id="prevNote"
-              aria-label="上一条注释"
+              :aria-label="pick('上一条注释', 'Previous Note')"
               @click="atlas?.showNote(ui.noteIndex - 1)"
             >
               <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -349,7 +527,7 @@ const hudTelemetry = computed(() => {
             ><span id="noteNumber">{{ ui.noteIndex + 1 }} / {{ ui.notes.length }}</span
             ><button
               id="nextNote"
-              aria-label="下一条注释"
+              :aria-label="pick('下一条注释', 'Next Note')"
               @click="atlas?.showNote(ui.noteIndex + 1)"
             >
               <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -359,16 +537,31 @@ const hudTelemetry = computed(() => {
           </div>
         </div>
       </aside>
-      <div class="camera-buttons" role="group" aria-label="视角缩放与复位">
-        <button id="zoomIn" title="拉近" aria-label="拉近" @click="atlas?.changeZoom(0.78)">
+      <div class="camera-buttons" role="group" :aria-label="pick('视角缩放与复位', 'Zoom and Reset Camera')">
+        <button
+          id="zoomIn"
+          :title="pick('拉近', 'Zoom In')"
+          :aria-label="pick('拉近', 'Zoom In')"
+          @click="atlas?.changeZoom(0.78)"
+        >
           <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" />
           </svg></button
-        ><button id="zoomOut" title="拉远" aria-label="拉远" @click="atlas?.changeZoom(1 / 0.78)">
+        ><button
+          id="zoomOut"
+          :title="pick('拉远', 'Zoom Out')"
+          :aria-label="pick('拉远', 'Zoom Out')"
+          @click="atlas?.changeZoom(1 / 0.78)"
+        >
           <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M3.5 8h9" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" />
           </svg></button
-        ><button id="reset" title="复位视角" aria-label="复位视角" @click="atlas?.reset()">
+        ><button
+          id="reset"
+          :title="pick('复位视角', 'Reset View')"
+          :aria-label="pick('复位视角', 'Reset View')"
+          @click="atlas?.reset()"
+        >
           <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.35" />
             <path d="M8 2.2v2.1M8 11.7v2.1M2.2 8h2.1M11.7 8h2.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" />

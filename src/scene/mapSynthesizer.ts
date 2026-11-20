@@ -28,6 +28,7 @@ export function createMapSynthesizer() {
       }
       const request: MapRequest = {
         spec, width, height, basePixels: options.basePixels ?? null,
+        closeRelief: options.closeRelief,
         includeSpecular: options.includeSpecular ?? true,
       }
       worker.postMessage(request)

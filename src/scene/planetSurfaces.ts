@@ -35,6 +35,44 @@ export const ringInner = 1.23
 export const ringOuter = 2.27
 export const uranusRingInner = 1.54
 export const uranusRingOuter = 2.08
+export const earthCloudRadius = 1.0055
+
+// Intersect the sunlight ray with the shell that draws the visible clouds.
+const closeEarthShadow = `
+  vec3 ground = normalize(vObjPos);
+  vec3 sun = normalize(vObjSunDir);
+  float mu = dot(ground, sun);
+  float shellDelta = ${earthCloudRadius ** 2 - 1};
+  float travel = shellDelta / (sqrt(mu * mu + shellDelta) + mu);
+  vec3 hit = normalize(ground + travel * sun);
+  vec2 horizontal = normalize(ground.xz + vec2(1e-8, 0.0));
+  float du = atan(dot(hit.xz, vec2(horizontal.y, -horizontal.x)), dot(hit.xz, horizontal)) / 6.2831853;
+  vec2 shadowUv = vec2(vMapUv.x - uCloudShift + du, 0.5 + asin(clamp(hit.y, -1.0, 1.0)) / 3.14159265);
+  float density = smoothstep(0.04, 0.92, texture2D(uCloudMap, shadowUv).r);
+  float _shFactor = 1.0 - 0.62 * density * smoothstep(-0.03, 0.14, mu);
+`
+
+// Illustrative cloud motion, in turns per simulation second. The axial tilt handles retrograde worlds.
+const cloudProfiles: Partial<Record<string, { rate: number; bandWidth: number; contrast: number }>> = {
+  Venus: { rate: 0.0011, bandWidth: 85, contrast: 0.68 },
+  Jupiter: { rate: 0.00065, bandWidth: 12, contrast: 1 },
+  Saturn: { rate: 0.00052, bandWidth: 17, contrast: 0.8 },
+  Uranus: { rate: 0.00024, bandWidth: 34, contrast: 0.38 },
+  Neptune: { rate: 0.00085, bandWidth: 29, contrast: 0.82 },
+  Titan: { rate: 0.00032, bandWidth: 65, contrast: 0.55 },
+}
+export function cloudProfile(id: string) {
+  return cloudProfiles[id]
+}
+export function cloudBand(id: string, v: number) {
+  const profile = cloudProfiles[id]
+  if (!profile) return 0
+  const latitude = (v - 0.5) * 180
+  const stormMask = id === 'Jupiter' ? T.MathUtils.smoothstep(Math.abs(latitude + 20), 6, 11) : 1
+  const polarMask = 1 - T.MathUtils.smoothstep(Math.abs(latitude), 56, 72)
+  return Math.tanh(2.8 * Math.cos(latitude * Math.PI / profile.bandWidth)) *
+    stormMask * polarMask * profile.contrast
+}
 
 export function polarRatio(id: string) {
   const entry = radiiAndDay[id]
@@ -515,6 +553,7 @@ export function planetMaterial(
 ) {
   const profile = surfaceProfiles[id] ?? defaultRockyProfile
   const isEarth = id === 'Earth'
+  const wind = cloudProfile(id)
   const isSaturn = id === 'Saturn'
   const isIo = id === 'Io'
 
@@ -540,6 +579,7 @@ export function planetMaterial(
 
   const cloudMapUniform: { value: T.Texture | null } = { value: options?.cloudMap ?? null }
   const cloudShiftUniform = { value: 0 }
+  if (wind) material.userData.cloudDrift = { value: 0 }
   const hasCloudsUniform = { value: options?.cloudMap ? 1 : 0 }
   const saturnPoleUniform = { value: new T.Vector3(0, 1, 0) }
   const saturnRadiusUniform = { value: 1 }
@@ -571,6 +611,7 @@ export function planetMaterial(
         : 'planet-surface-v2'
 
   material.onBeforeCompile = (shader) => {
+    const closeClouds = material.userData.photoCloudDetail === true
     Object.assign(shader.uniforms, {
       uAmbientScale: { value: profile.ambientScale },
       uWrap: { value: profile.wrap },
@@ -679,6 +720,19 @@ export function planetMaterial(
 
     let frag = fDecl + shader.fragmentShader
 
+    if (wind && closeClouds) {
+      shader.uniforms.uJetDrift = material.userData.cloudDrift
+      shader.vertexShader = 'attribute float jetBand; varying float vJetBand;\n' +
+        shader.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\nvJetBand = jetBand;')
+      frag = 'uniform float uJetDrift; varying float vJetBand;\n' + frag.replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+          vec2 advected = vMapUv - vec2(sign(vJetBand) * uJetDrift, 0.0);
+          diffuseColor *= mix(texture2D(map, vMapUv), texture2D(map, advected), abs(vJetBand));
+        #endif`,
+      )
+    }
+
     if (isEarth) {
       frag = frag.replace(
         '#include <emissivemap_fragment>',
@@ -747,6 +801,7 @@ export function planetMaterial(
           reflectedLight.directSpecular *= (0.48 + 1.38 * pow(1.0 - _mu, 3.0)) * vec3(1.06, 0.99, 0.9);
           #ifdef USE_MAP
             if (uHasClouds > 0.5 && _sunAngle > -0.05) {
+              ${closeClouds ? closeEarthShadow : `
               vec3 _tanU = normalize(vec3(vObjPos.z, 0.0, -vObjPos.x) + vec3(1e-5, 0.0, 0.0));
               vec3 _tanV = normalize(vec3(-vObjPos.x * vObjPos.y, 1.0 - vObjPos.y * vObjPos.y + 1e-4, -vObjPos.z * vObjPos.y));
               float _du = dot(vObjSunDir, _tanU) * 0.0024 / max(0.28, length(vObjPos.xz));
@@ -754,6 +809,7 @@ export function planetMaterial(
               vec2 _shUv = vec2(fract(vMapUv.x - uCloudShift + _du), clamp(vMapUv.y + _dv, 0.001, 0.999));
               float _shCloud = texture2D(uCloudMap, _shUv).r;
               float _shFactor = 1.0 - 0.52 * _shCloud * smoothstep(-0.02, 0.24, _sunAngle);
+              `}
               reflectedLight.directDiffuse *= _shFactor;
               reflectedLight.directSpecular *= _shFactor * _shFactor;
             }
@@ -824,7 +880,8 @@ export function planetMaterial(
     shader.fragmentShader = frag
   }
 
-  material.customProgramCacheKey = () => cacheTag
+  material.customProgramCacheKey = () =>
+    material.userData.photoCloudDetail ? `${cacheTag}-${id}-close-clouds` : cacheTag
   return material
 }
 
@@ -910,10 +967,13 @@ export function shadePlanetaryRing(
   detailed: boolean,
 ) {
   const pole = new T.Vector3(0, 1, 0).applyQuaternion(axis.quaternion)
+  const opticalDepth = { value: 0 }
+  if (detailed) ring.userData.closeOpticalDepth = opticalDepth
   ring.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
       pole: { value: pole },
       polarRatio: { value: polar },
+      closeOpticalDepth: opticalDepth,
     })
     shader.vertexShader =
       'varying vec3 vOffset; varying vec3 vToSun; varying vec3 vToCam; varying float vRingU;\n' +
@@ -936,6 +996,7 @@ export function shadePlanetaryRing(
       varying float vRingU;
       uniform vec3 pole;
       uniform float polarRatio;
+      uniform float closeOpticalDepth;
     ` +
       shader.fragmentShader.replace(
         '#include <opaque_fragment>',
@@ -949,6 +1010,10 @@ export function shadePlanetaryRing(
         float transmission = smoothstep(0.982, 1.018, length(origin + t * dir));
         float sunSide = dot(ray, pole);
         float camSide = dot(viewR, pole);
+        ${detailed ? `if (closeOpticalDepth > 0.5) {
+          float pathLength = 1.0 / max(0.32, abs(camSide));
+          diffuseColor.a = 1.0 - pow(max(0.0, 1.0 - diffuseColor.a), pathLength);
+        }` : ''}
         float phaseCos = dot(ray, viewR);
         float opposition = 1.0 + 0.16 * pow(max(0.0, phaseCos), 6.0);
         float forwardGlow = 0.24 * pow(max(0.0, -phaseCos), 5.0);

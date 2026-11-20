@@ -1,6 +1,8 @@
 import * as T from 'three'
 import { createMapSynthesizer } from './mapSynthesizer'
 import { assignMoonNames, declinations, featured, type createSolarSystem } from '../data/solar'
+import { pick } from '../i18n'
+import { worldName } from '../i18n/catalogEn'
 import { createAsteroidBelts } from './belts'
 import {
   buildDetailedBodyGeometry,
@@ -24,6 +26,7 @@ import {
   createQuaoarRings,
   createUranusRings,
   createVenusHazeMaterial,
+  earthCloudRadius,
   planetMaterial,
   polarRatio,
   spinRate,
@@ -185,10 +188,10 @@ export function createSolarModels(
   scene.add(new T.PointLight(0xfff5df, 2.55, 0, 0))
   const sun = {
     id: 'Sun',
-    name: '太阳',
+    name: pick('太阳', 'Sun'),
     r: 8.4,
     pos: v3(),
-    tag: tag('太阳', 'star'),
+    tag: tag(pick('太阳', 'Sun'), 'star'),
     mesh: globe('Sun', 8.4),
   }
   scene.add(sun.mesh)
@@ -598,7 +601,7 @@ export function createSolarModels(
     p.anchor.add(p.axis)
     p.mesh = globe(p.id, p.r)
     p.axis.add(p.mesh)
-    p.tag = tag(p.name)
+    p.tag = tag(worldName(p))
     if (p.id === 'Haumea') {
       p.mesh.scale.multiply(v3(1.36, 0.69, 1.06))
       if (webgl) attachMinorRing(p, createHaumeaRing(p.r, p.axis))
@@ -626,7 +629,7 @@ export function createSolarModels(
     }
     if (p.id === 'Earth') {
       p.clouds = new T.Mesh(sphere, createEarthCloudsMaterial(textures.Clouds))
-      p.clouds.scale.copy(p.mesh.scale).multiplyScalar(1.0055)
+      p.clouds.scale.copy(p.mesh.scale).multiplyScalar(earthCloudRadius)
       p.clouds.renderOrder = 1
       p.axis.add(p.clouds)
     }

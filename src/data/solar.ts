@@ -50,6 +50,7 @@ interface SmallOrbitRecord {
   per: number
   code: string
   kind: string
+  discovered: string
   source: string
   summary: string
   lagrangeDeg?: number
@@ -59,18 +60,18 @@ interface SmallOrbitRecord {
 export function createSolarSystem() {
   const planets = (
     [
-      ['Mercury', '水星', 15, 0.98, 87.97, 130, 0.206, 7.0, 48],
-      ['Venus', '金星', 23, 1.52, 224.7, 232, 0.007, 3.39, 77],
-      ['Earth', '地球', 34, 1.82, 365.26, 32, 0.017, 0, 0],
-      ['Mars', '火星', 45, 1.37, 686.98, 172, 0.093, 1.85, 49],
-      ['Jupiter', '木星', 68, 6.18, 4332.6, 338, 0.049, 1.3, 100],
-      ['Saturn', '土星', 91, 5.55, 10759, 225, 0.054, 2.49, 113],
-      ['Uranus', '天王星', 112, 3.1, 30687, 151, 0.047, 0.77, 74],
-      ['Neptune', '海王星', 134, 3.0, 60190, 67, 0.009, 1.77, 132],
+      ['Mercury', '水星', 15, 0.98, 87.97, 130, 0.206, 7.0, 48, '自古已知'],
+      ['Venus', '金星', 23, 1.52, 224.7, 232, 0.007, 3.39, 77, '自古已知'],
+      ['Earth', '地球', 34, 1.82, 365.26, 32, 0.017, 0, 0, '自古已知'],
+      ['Mars', '火星', 45, 1.37, 686.98, 172, 0.093, 1.85, 49, '自古已知'],
+      ['Jupiter', '木星', 68, 6.18, 4332.6, 338, 0.049, 1.3, 100, '自古已知'],
+      ['Saturn', '土星', 91, 5.55, 10759, 225, 0.054, 2.49, 113, '自古已知'],
+      ['Uranus', '天王星', 112, 3.1, 30687, 151, 0.047, 0.77, 74, '1781 年'],
+      ['Neptune', '海王星', 134, 3.0, 60190, 67, 0.009, 1.77, 132, '1846 年'],
     ] as const
   ).map(
-    ([id, name, a, r, days, phase, e, inc, node]) =>
-      new World({ id, name, a, r, days, phase: phase * rad, e, inc, node }, catalog[id]),
+    ([id, name, a, r, days, phase, e, inc, node, discovered]) =>
+      new World({ id, name, a, r, days, phase: phase * rad, e, inc, node, discovered }, catalog[id]),
   )
 
   // Bound the entire planet + satellite/ring system, including moon apoapsis.
@@ -170,6 +171,7 @@ export function createSolarSystem() {
       per: 1680.0,
       code: '1 Ceres',
       kind: '矮行星',
+      discovered: '1801 年',
       source: 'https://science.nasa.gov/dwarf-planets/ceres/',
       summary: '主小行星带最大的天体，也是内太阳系唯一的矮行星。黎明号探测揭示了奥卡托坑内明亮的碳酸钠盐穹与阿胡纳冰火山。',
       prominent: true,
@@ -183,6 +185,7 @@ export function createSolarSystem() {
       per: 1330.0,
       code: '4 Vesta',
       kind: '原行星小行星',
+      discovered: '1807 年',
       source: 'https://science.nasa.gov/solar-system/asteroids/4-vesta/',
       summary: '主带第二大质量天体。黎明号测绘了其南极巨大的雷亚希尔维亚撞击盆地、22 千米高中央峰与赤道槽沟群。',
     },
@@ -195,6 +198,7 @@ export function createSolarSystem() {
       per: 1680.0,
       code: '2 Pallas',
       kind: '小行星',
+      discovered: '1802 年',
       source: sbdb + 'Pallas',
       summary: '高倾角大型主带小行星。甚大望远镜高分辨率成像显示其布满密集撞击坑，外观宛如饱经撞击的高尔夫球。',
     },
@@ -207,6 +211,7 @@ export function createSolarSystem() {
       per: 1590.0,
       code: '3 Juno',
       kind: '小行星',
+      discovered: '1804 年',
       source: sbdb + 'Juno',
       summary: '较大的石质 S 型主带小行星，表面保留着一座跨度约 100 千米的近期大型撞击坑。',
     },
@@ -219,6 +224,7 @@ export function createSolarSystem() {
       per: 2040.0,
       code: '10 Hygiea',
       kind: '碳质小行星',
+      discovered: '1849 年',
       source: sbdb + 'Hygiea',
       summary: '主带第四大天体，表面漆黑富含碳质物质。甚大望远镜观测表明其外形近乎球体，是潜在矮行星候选体。',
     },
@@ -231,6 +237,7 @@ export function createSolarSystem() {
       per: 1825.6,
       code: '16 Psyche',
       kind: '金属小行星',
+      discovered: '1852 年',
       source: 'https://science.nasa.gov/mission/psyche/',
       summary: 'NASA 灵神星号探测目标，富含铁镍金属与硅酸盐岩石，被视为太阳系早期原行星裸露的金属核残骸。',
       prominent: true,
@@ -246,6 +253,7 @@ export function createSolarSystem() {
       per: 4332.6,
       code: '3548 Eurybates',
       kind: '特洛伊小行星',
+      discovered: '1973 年',
       source: 'https://science.nasa.gov/mission/lucy/',
       summary: '位于木星轨道前方 60° 的 L4 希腊营，是 NASA 露西号的首颗特洛伊探测目标，哈勃为其发现了卫星奎塔。',
       lagrangeDeg: 60,
@@ -259,6 +267,7 @@ export function createSolarSystem() {
       per: 4332.6,
       code: '617 Patroclus',
       kind: '特洛伊双星',
+      discovered: '1906 年',
       source: 'https://science.nasa.gov/mission/lucy/',
       summary: '位于木星后方 60° 的 L5 特洛伊营，与尺寸相近的伴星墨诺提俄斯组成几乎等大的原始暗红冰岩双星，是露西号核心目标。',
       lagrangeDeg: -60,
@@ -275,6 +284,7 @@ export function createSolarSystem() {
       per: 18426.0,
       code: '2060 Chiron · 95P',
       kind: '半人马天体',
+      discovered: '1977 年',
       source: sbdb + '2060',
       summary: '运行在土星与天王星轨道之间的首颗半人马天体，同时具有彗星编号 95P。韦布望远镜检出其表面的水冰、甲烷与二氧化碳，恒星掩星还揭示了演化中的环盘与微弱彗发。',
       prominent: true,
@@ -288,6 +298,7 @@ export function createSolarSystem() {
       per: 22960.0,
       code: '10199 Chariklo',
       kind: '环带半人马天体',
+      discovered: '1997 年',
       source: sbdb + '10199',
       summary: '土星与天王星之间已知最大的半人马天体，也是太阳系首颗被证实拥有致密双冰环的小天体（奥亚波克环与舒伊环），韦布望远镜在环中确认了结晶水冰。',
       prominent: true,
@@ -301,6 +312,7 @@ export function createSolarSystem() {
       per: 33450.0,
       code: '5145 Pholus',
       kind: '半人马天体',
+      discovered: '1992 年',
       source: sbdb + '5145',
       summary: '穿梭于巨行星轨道间的极红半人马天体，表面覆盖受长期辐射演化的有机托林与甲醇冰，色泽深红。',
     },
@@ -315,6 +327,7 @@ export function createSolarSystem() {
       per: 90560.0,
       code: '134340 Pluto',
       kind: '矮行星',
+      discovered: '1930 年',
       source: 'https://science.nasa.gov/dwarf-planets/pluto/',
       summary: '柯伊伯带代表性矮行星。新视野号飞掠揭示了心形的汤博区氮冰平原、克苏鲁暗红赤道带、稀薄蓝霾大气与五颗卫星。',
       prominent: true,
@@ -328,6 +341,7 @@ export function createSolarSystem() {
       per: 90400.0,
       code: '90482 Orcus',
       kind: '矮行星候选',
+      discovered: '2004 年',
       source: sbdb + '90482',
       summary: '与海王星呈 3:2 共振且相位常与冥王星相反，被称为“反冥王星”。光谱显示其覆盖明亮的结晶水冰与氨水合物，伴有一颗暗红色的大卫星亡卫一。',
       prominent: true,
@@ -341,6 +355,7 @@ export function createSolarSystem() {
       per: 103000.0,
       code: '136108 Haumea',
       kind: '矮行星',
+      discovered: '2004 年',
       source: 'https://science.nasa.gov/dwarf-planets/haumea/',
       summary: '仅约 3.9 小时极速自转的柯伊伯带矮行星，因离心力被拉成三轴椭球体，拥有纯净结晶水冰表层、暗红斑、细窄光环与两颗卫星。',
       prominent: true,
@@ -354,6 +369,7 @@ export function createSolarSystem() {
       per: 105480.0,
       code: '50000 Quaoar',
       kind: '矮行星',
+      discovered: '2002 年',
       source: sbdb + '50000',
       summary: '经典柯伊伯带大型矮行星。2023 年掩星与 CHEOPS 望远镜震撼发现它在远超洛希极限处拥有两条致密冰环，外侧还运行着卫星创卫一。',
       prominent: true,
@@ -367,6 +383,7 @@ export function createSolarSystem() {
       per: 108700.0,
       code: '486958 Arrokoth',
       kind: '柯伊伯带天体',
+      discovered: '2014 年',
       source: 'https://science.nasa.gov/solar-system/kuiper-belt/arrokoth/',
       summary: '新视野号 2019 年近距离飞掠的人类探测最远天体，呈扁平雪人状双瓣相接结构，表面深砖红、颈部环绕明亮细粒物质带，大倾角约 98°。',
     },
@@ -379,6 +396,7 @@ export function createSolarSystem() {
       per: 112000.0,
       code: '136472 Makemake',
       kind: '矮行星',
+      discovered: '2005 年',
       source: 'https://science.nasa.gov/dwarf-planets/makemake/',
       summary: '柯伊伯带第二亮天体，表面富含冻结甲烷、乙烷与偏红的托林物质，哈勃为其发现了一颗暗弱卫星 MK 2。',
       prominent: true,
@@ -394,6 +412,7 @@ export function createSolarSystem() {
       per: 202500.0,
       code: '225088 Gonggong',
       kind: '矮行星',
+      discovered: '2007 年',
       source: sbdb + '225088',
       summary: '海王星 3:10 共振的离散盘大型矮行星，以中国古代水神共工命名，是太阳系颜色最赤红的大型天体之一，拥有哈勃发现的卫星相柳（共卫一）。',
       prominent: true,
@@ -407,6 +426,7 @@ export function createSolarSystem() {
       per: 205000.0,
       code: '136199 Eris',
       kind: '矮行星',
+      discovered: '2005 年',
       source: 'https://science.nasa.gov/dwarf-planets/eris/',
       summary: '已知质量最大的矮行星，沿 43.9° 极高倾角轨道深入离散盘，表面覆有高反照率氮冰与甲烷霜层，伴有大型卫星迪丝诺美亚（阋卫一）。',
       prominent: true,
@@ -420,6 +440,7 @@ export function createSolarSystem() {
       per: 262000.0,
       code: '2018 AG37 · Farfarout',
       kind: '极远离散天体',
+      discovered: '2018 年',
       source: sbdb + '2018%20AG37',
       summary: '目前观测距离太阳最远的已知太阳系天体（观测距离约 132 天文单位），高偏心率轨道从海王星外缘一路摆荡至极远离散盘深处。',
       prominent: true,
@@ -433,6 +454,7 @@ export function createSolarSystem() {
       per: 1586000.0,
       code: '2012 VP113',
       kind: '分离矮行星',
+      discovered: '2012 年',
       source: sbdb + '2012%20VP113',
       summary: '继赛德娜之后发现的第二颗类赛德娜分离天体，近日点高达 80.5 天文单位，彻底脱离海王星引力掌控，表面呈现淡粉红霜色。',
       prominent: true,
@@ -446,6 +468,7 @@ export function createSolarSystem() {
       per: 4160000.0,
       code: '90377 Sedna',
       kind: '内奥尔特云矮行星',
+      discovered: '2003 年',
       source: 'https://science.nasa.gov/solar-system/kuiper-belt/sedna/',
       summary: '极遥远的内奥尔特云矮行星，轨道近日点 76 AU、远日点直达 937 AU，公转一周逾 1.1 万年；表面经宇宙射线长年辐照呈深赤红色，韦布检出乙烷与乙炔等有机冰。',
       prominent: true,
@@ -537,6 +560,7 @@ export function createSolarSystem() {
         days: o.per,
         kind: o.kind,
         code: o.code,
+        discovered: o.discovered,
         summary: o.summary,
         source: o.source,
         prominent: o.prominent,
@@ -578,6 +602,13 @@ const moonAliases: Record<string, string[]> = {
   Iapetus: ['伊阿珀托斯', '伊阿佩托斯'],
   Hyperion: ['许珀里翁', '海伯利安'],
   Phoebe: ['菲比'],
+  Janus: ['雅努斯', '杰纳斯'],
+  Epimetheus: ['厄庇墨透斯', '艾比米修斯'],
+  Atlas: ['阿特拉斯'],
+  Prometheus: ['普罗米修斯'],
+  Pandora: ['潘多拉'],
+  Pan: ['潘', '潘神'],
+  Daphnis: ['达佛涅斯', '达夫尼斯'],
   Phobos: ['福波斯', '弗伯斯'],
   Deimos: ['德摩斯', '得摩斯', '德莫斯'],
   Triton: ['特里同', '崔顿'],
@@ -616,6 +647,16 @@ function chineseNumber(n: number): string {
   )
 }
 
+const moonDiscoveryLabels: Record<string, string> = {
+  'Earth-Moon': '自古已知',
+  'Jupiter-Themisto': '1975 年（2000 年重新发现）',
+  'Saturn-Janus': '1966 年',
+  'Saturn-Epimetheus': '1966 年（1977 年确认独立）',
+  'Uranus-Perdita': '1999 年（1986 年影像）',
+  'Neptune-Larissa': '1981 年（1989 年确认）',
+  'Makemake-MK 2': '2015 年（2016 年公布）',
+}
+
 export function assignMoonNames(p: World, m: Moon) {
   const values: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500 }
   const n = [...(m.num || '')].reduce(
@@ -638,6 +679,7 @@ export function assignMoonNames(p: World, m: Moon) {
   const prefix = prefixes[p.id]
   m.numberName = n && prefix ? prefix + '卫' + chineseNumber(n) : ''
   m.label = moonAliases[m.name]?.[0] || m.name
+  m.discovered = moonDiscoveryLabels[`${p.id}-${m.name}`] || (m.year ? `${m.year} 年` : '未列出')
   m.otherNames = [
     ...new Set(
       [m.name, m.numberName, m.des, ...(moonAliases[m.name] || [])].filter(
@@ -645,5 +687,11 @@ export function assignMoonNames(p: World, m: Moon) {
       ),
     ),
   ]
-  m.searchNames = [m.label, ...m.otherNames, m.num || '', n && prefix ? prefix + '卫' + n : '']
+  m.searchNames = [
+    m.label,
+    ...m.otherNames,
+    m.num || '',
+    m.num ? `${p.id} ${m.num}` : '',
+    n && prefix ? prefix + '卫' + n : '',
+  ]
 }
