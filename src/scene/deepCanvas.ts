@@ -273,11 +273,19 @@ export function createDeepCanvasRenderer(
     ctx.fillStyle = '#060b12'
     ctx.fillRect(0, 0, width, height)
     const pos = v3(),
-      background = d.background.geometry.attributes.position
-    ctx.fillStyle = '#8494aa'
-    for (let i = 0; i < background.count; i++) {
+      background = d.background.geometry.attributes.position,
+      bgCol = d.background.geometry.attributes.color,
+      bgSize = d.background.geometry.attributes.aSize
+    const bgStep = background.count > 2600 ? 2 : 1
+    for (let i = 0; i < background.count; i += bgStep) {
       const q = project(pos.fromBufferAttribute(background, i).add(camera.position))
-      if (q && q.x >= 0 && q.x < width && q.y >= 0 && q.y < height) ctx.fillRect(q.x, q.y, 1, 1)
+      if (!q || q.x < 0 || q.x >= width || q.y < 0 || q.y >= height) continue
+      const r = bgCol ? Math.min(255, Math.round(bgCol.getX(i) * 255)) : 140
+      const g = bgCol ? Math.min(255, Math.round(bgCol.getY(i) * 255)) : 162
+      const b = bgCol ? Math.min(255, Math.round(bgCol.getZ(i) * 255)) : 190
+      const sz = bgSize ? Math.min(2.2, Math.max(0.9, bgSize.getX(i) * 0.3)) : 1
+      ctx.fillStyle = `rgba(${r},${g},${b},0.72)`
+      ctx.fillRect(q.x - sz * 0.5, q.y - sz * 0.5, sz, sz)
     }
     for (const orbit of d.orbits) {
       if (!orbit.visible) continue

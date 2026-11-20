@@ -1,7 +1,7 @@
 import type * as T from 'three'
 import type { Orbit } from './math'
 
-export type Belt = 'main' | 'outer'
+export type Belt = 'main' | 'trojan' | 'centaur' | 'outer' | 'scattered'
 export type OrbitMode = 'smart' | 'all' | 'off'
 export type OrbitPath = T.Line<T.BufferGeometry, T.LineBasicMaterial>
 export interface MoonRecord {
@@ -66,8 +66,13 @@ export interface WorldDefinition {
   region?: Belt
   peri?: number
   au?: number
+  periAU?: number
+  apoAU?: number
   kind?: string
+  code?: string
+  summary?: string
   source?: string
+  prominent?: boolean
 }
 
 export interface World extends WorldDefinition {}
@@ -88,6 +93,7 @@ export class World {
   moonTracks!: T.Group
   rings?: T.Mesh
   minorRings?: T.Mesh
+  coma?: T.Mesh
   clouds?: T.Mesh
   haze?: T.Mesh
   atmosphere?: T.Mesh

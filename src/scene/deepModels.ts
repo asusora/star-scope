@@ -255,11 +255,12 @@ export function createDeepModels(
     const k = c.getContext('2d')!,
       g = k.createRadialGradient(128, 128, 0, 128, 128, 128)
     for (const [r, alpha] of [
-      [0, 'e8'],
-      [0.23, 'a0'],
-      [0.3, '50'],
-      [0.43, '22'],
-      [0.66, '08'],
+      [0, 'dc'],
+      [0.14, 'b4'],
+      [0.26, '6e'],
+      [0.42, '30'],
+      [0.62, '10'],
+      [0.82, '04'],
       [1, '00'],
     ] as const)
       g.addColorStop(r, color + alpha)

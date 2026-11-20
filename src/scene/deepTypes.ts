@@ -64,7 +64,7 @@ export interface DeepModel {
   landmarks: [string, T.Vector3, HTMLSpanElement][]
   background: T.Points
   volume?: T.Mesh<T.BufferGeometry, T.ShaderMaterial>
-  sky?: T.Mesh<T.BufferGeometry, T.MeshBasicMaterial>
+  sky?: T.Mesh<T.BufferGeometry, T.ShaderMaterial>
   voxels?: {
     nx: number
     ny: number

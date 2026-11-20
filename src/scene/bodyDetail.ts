@@ -51,6 +51,8 @@ export interface BodyDetailSpec {
   scaleXYZ: [number, number, number]
   /** Bilobed contact-binary waist pinch (0 = none). */
   bilobed?: number
+  /** Asymmetric flattened New Horizons snowman contact binary (Arrokoth). */
+  arrokothShape?: boolean
   /** Macro irregular rock bumpiness. */
   roughness: number
   /** Sharp polygonal rock facet intensity (e.g. Proteus, Juno, minor moons). */
@@ -604,6 +606,627 @@ const curatedSpecs: Record<string, BodyDetailSpec> = {
       { dir: norm3(0.65, -0.25, -0.71), radius: 0.46, softness: 0.65, color: [0.76, 0.74, 0.74], gloss: 0.22, noiseMix: 0.5 },
     ],
     baseImageMix: 0.4,
+  },
+  Psyche: {
+    id: 'Psyche',
+    seed: 1016,
+    customShape: true,
+    scaleXYZ: [1.24, 0.85, 1.04],
+    roughness: 0.068,
+    facetStrength: 0.065,
+    geoCraterCount: 16,
+    specialCraters: [
+      // Radar-imaged massive twin basins exposing bright iron-nickel metallic interior
+      {
+        dir: norm3(0.72, 0.22, 0.66),
+        radius: 0.46,
+        depth: 0.11,
+        peak: 0.025,
+        rim: 0.42,
+        floorTint: [0.84, 0.86, 0.9],
+      },
+      {
+        dir: norm3(-0.64, -0.28, 0.71),
+        radius: 0.38,
+        depth: 0.088,
+        rim: 0.38,
+        floorTint: [0.78, 0.8, 0.84],
+      },
+      { dir: norm3(0.18, -0.78, -0.6), radius: 0.32, depth: 0.072, rim: 0.34 },
+    ],
+    texCraterCount: 125,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.15,
+    craterDepthScale: 0.36,
+    brightCraterFloor: 0.35,
+    baseColor: [0.56, 0.58, 0.62],
+    highColor: [0.82, 0.84, 0.88],
+    lowColor: [0.28, 0.29, 0.32],
+    macroFreq: 2.9,
+    detailFreq: 13.5,
+    ridgeMix: 0.54,
+    noiseContrast: 0.52,
+    microRoughness: 0.26,
+    normalStrength: 1.85,
+    baseGloss: 0.54,
+    iceGlossBoost: 0.32,
+    patches: [
+      // Silicate-rich darker regolith blanket contrasting with metallic outcrops
+      { dir: norm3(-0.42, 0.66, -0.62), radius: 0.54, softness: 0.62, color: [0.38, 0.37, 0.36], gloss: 0.14, noiseMix: 0.55 },
+      { dir: norm3(0.54, -0.45, -0.71), radius: 0.44, softness: 0.58, color: [0.78, 0.81, 0.86], gloss: 0.76, noiseMix: 0.45 },
+    ],
+  },
+  Eurybates: {
+    id: 'Eurybates',
+    seed: 3548,
+    customShape: true,
+    scaleXYZ: [1.18, 0.84, 0.96],
+    roughness: 0.082,
+    facetStrength: 0.075,
+    geoCraterCount: 18,
+    specialCraters: [
+      // Catastrophic collisional family-forming scar crater
+      { dir: norm3(0.7, 0.18, 0.69), radius: 0.52, depth: 0.13, rim: 0.36, floorTint: [0.36, 0.36, 0.37] },
+      { dir: norm3(-0.55, -0.44, -0.71), radius: 0.34, depth: 0.075, rim: 0.3 },
+    ],
+    texCraterCount: 135,
+    craterMinRad: 0.02,
+    craterMaxRad: 0.16,
+    craterDepthScale: 0.38,
+    baseColor: [0.32, 0.32, 0.33],
+    highColor: [0.46, 0.46, 0.48],
+    lowColor: [0.18, 0.18, 0.19],
+    macroFreq: 3.3,
+    detailFreq: 14.0,
+    ridgeMix: 0.48,
+    noiseContrast: 0.44,
+    microRoughness: 0.34,
+    normalStrength: 1.85,
+    baseGloss: 0.03,
+  },
+  Queta: {
+    id: 'Queta',
+    seed: 3549,
+    customShape: true,
+    scaleXYZ: [1.24, 0.8, 0.92],
+    roughness: 0.095,
+    facetStrength: 0.09,
+    geoCraterCount: 10,
+    specialCraters: [{ dir: norm3(0.62, 0.35, 0.7), radius: 0.42, depth: 0.095, rim: 0.32 }],
+    texCraterCount: 85,
+    craterMinRad: 0.022,
+    craterMaxRad: 0.16,
+    craterDepthScale: 0.36,
+    baseColor: [0.34, 0.33, 0.34],
+    highColor: [0.48, 0.47, 0.48],
+    lowColor: [0.19, 0.19, 0.2],
+    macroFreq: 3.5,
+    detailFreq: 14.5,
+    ridgeMix: 0.5,
+    noiseContrast: 0.42,
+    microRoughness: 0.36,
+    normalStrength: 1.8,
+    baseGloss: 0.03,
+  },
+  Patroclus: {
+    id: 'Patroclus',
+    seed: 6170,
+    customShape: true,
+    scaleXYZ: [1.14, 0.9, 1.02],
+    roughness: 0.056,
+    facetStrength: 0.04,
+    geoCraterCount: 14,
+    specialCraters: [
+      { dir: norm3(0.66, 0.28, 0.69), radius: 0.38, depth: 0.078, rim: 0.32, floorTint: [0.54, 0.42, 0.36] },
+      { dir: norm3(-0.72, -0.22, -0.66), radius: 0.3, depth: 0.062, rim: 0.28 },
+    ],
+    texCraterCount: 115,
+    craterMinRad: 0.02,
+    craterMaxRad: 0.14,
+    craterDepthScale: 0.32,
+    baseColor: [0.44, 0.33, 0.28],
+    highColor: [0.6, 0.47, 0.4],
+    lowColor: [0.24, 0.17, 0.14],
+    macroFreq: 2.9,
+    detailFreq: 13.0,
+    ridgeMix: 0.38,
+    noiseContrast: 0.44,
+    microRoughness: 0.3,
+    normalStrength: 1.6,
+    baseGloss: 0.05,
+  },
+  Menoetius: {
+    id: 'Menoetius',
+    seed: 6171,
+    customShape: true,
+    scaleXYZ: [1.12, 0.88, 1.0],
+    roughness: 0.058,
+    facetStrength: 0.042,
+    geoCraterCount: 14,
+    specialCraters: [
+      { dir: norm3(-0.48, 0.56, 0.67), radius: 0.42, depth: 0.088, rim: 0.34, floorTint: [0.52, 0.4, 0.35] },
+      { dir: norm3(0.58, -0.35, -0.73), radius: 0.28, depth: 0.058, rim: 0.28 },
+    ],
+    texCraterCount: 110,
+    craterMinRad: 0.02,
+    craterMaxRad: 0.14,
+    craterDepthScale: 0.32,
+    baseColor: [0.42, 0.32, 0.27],
+    highColor: [0.58, 0.45, 0.39],
+    lowColor: [0.23, 0.17, 0.14],
+    macroFreq: 3.0,
+    detailFreq: 13.0,
+    ridgeMix: 0.4,
+    noiseContrast: 0.44,
+    microRoughness: 0.3,
+    normalStrength: 1.6,
+    baseGloss: 0.05,
+  },
+  Chiron: {
+    id: 'Chiron',
+    seed: 2060,
+    customShape: true,
+    scaleXYZ: [1.14, 0.88, 1.04],
+    roughness: 0.052,
+    facetStrength: 0.032,
+    geoCraterCount: 14,
+    specialCraters: [
+      // Sublimating CO/CO2/water-ice active pits (JWST 2024)
+      {
+        dir: norm3(0.62, 0.34, 0.71),
+        radius: 0.26,
+        depth: 0.058,
+        rim: 0.34,
+        floorTint: [0.84, 0.9, 0.96],
+        rays: 0.4,
+      },
+      {
+        dir: norm3(-0.58, -0.26, 0.77),
+        radius: 0.22,
+        depth: 0.048,
+        rim: 0.3,
+        floorTint: [0.78, 0.86, 0.92],
+      },
+    ],
+    texCraterCount: 110,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.13,
+    craterDepthScale: 0.3,
+    brightCraterFloor: 0.28,
+    baseColor: [0.38, 0.4, 0.44],
+    highColor: [0.62, 0.66, 0.72],
+    lowColor: [0.2, 0.22, 0.25],
+    macroFreq: 2.8,
+    detailFreq: 12.5,
+    ridgeMix: 0.4,
+    noiseContrast: 0.48,
+    microRoughness: 0.26,
+    normalStrength: 1.55,
+    baseGloss: 0.14,
+    iceGlossBoost: 0.32,
+    patches: [
+      { dir: norm3(0.32, 0.68, 0.66), radius: 0.38, softness: 0.62, color: [0.74, 0.82, 0.9], gloss: 0.44, noiseMix: 0.55 },
+      { dir: norm3(-0.68, -0.18, -0.71), radius: 0.42, softness: 0.65, color: [0.26, 0.28, 0.31], gloss: 0.06, noiseMix: 0.5 },
+    ],
+  },
+  Chariklo: {
+    id: 'Chariklo',
+    seed: 10199,
+    customShape: true,
+    scaleXYZ: [1.18, 0.74, 1.04], // Triaxial occultation shape (296 × 262 × 182 km)
+    roughness: 0.048,
+    facetStrength: 0.035,
+    geoCraterCount: 15,
+    specialCraters: [
+      { dir: norm3(0.68, 0.24, 0.69), radius: 0.3, depth: 0.064, rim: 0.34, floorTint: [0.62, 0.6, 0.62] },
+      { dir: norm3(-0.66, -0.32, -0.68), radius: 0.26, depth: 0.054, rim: 0.3 },
+    ],
+    texCraterCount: 120,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.14,
+    craterDepthScale: 0.32,
+    brightCraterFloor: 0.16,
+    baseColor: [0.36, 0.33, 0.32],
+    highColor: [0.54, 0.5, 0.48],
+    lowColor: [0.19, 0.17, 0.17],
+    macroFreq: 3.0,
+    detailFreq: 13.0,
+    ridgeMix: 0.42,
+    noiseContrast: 0.46,
+    microRoughness: 0.28,
+    normalStrength: 1.65,
+    baseGloss: 0.08,
+    iceGlossBoost: 0.22,
+    patches: [
+      { dir: norm3(-0.32, 0.58, 0.75), radius: 0.42, softness: 0.65, color: [0.48, 0.4, 0.37], gloss: 0.1, noiseMix: 0.55 },
+    ],
+  },
+  Pholus: {
+    id: 'Pholus',
+    seed: 5145,
+    customShape: true,
+    scaleXYZ: [1.16, 0.86, 0.96],
+    roughness: 0.068,
+    facetStrength: 0.05,
+    geoCraterCount: 14,
+    specialCraters: [
+      { dir: norm3(0.64, -0.28, 0.71), radius: 0.36, depth: 0.078, rim: 0.34, floorTint: [0.72, 0.46, 0.38] },
+    ],
+    texCraterCount: 115,
+    craterMinRad: 0.02,
+    craterMaxRad: 0.14,
+    craterDepthScale: 0.34,
+    baseColor: [0.58, 0.25, 0.19], // Ultra-red irradiated methanol/tholin Centaur!
+    highColor: [0.76, 0.42, 0.33],
+    lowColor: [0.32, 0.12, 0.09],
+    macroFreq: 2.9,
+    detailFreq: 13.0,
+    ridgeMix: 0.42,
+    noiseContrast: 0.52,
+    microRoughness: 0.28,
+    normalStrength: 1.65,
+    baseGloss: 0.09,
+    patches: [
+      { dir: norm3(-0.52, 0.48, 0.7), radius: 0.44, softness: 0.6, color: [0.68, 0.32, 0.24], gloss: 0.14, noiseMix: 0.5 },
+    ],
+  },
+  Orcus: {
+    id: 'Orcus',
+    seed: 90482,
+    customShape: false,
+    scaleXYZ: [1, 1, 1],
+    roughness: 0.01,
+    geoCraterCount: 0,
+    specialCraters: [
+      {
+        dir: norm3(0.64, 0.32, 0.7),
+        radius: 0.18,
+        depth: 0.26,
+        peak: 0.08,
+        rim: 0.34,
+        floorTint: [0.92, 0.96, 1.0],
+        rays: 0.62,
+      },
+      { dir: norm3(-0.72, -0.24, 0.65), radius: 0.22, depth: 0.24, rim: 0.28 },
+      { dir: norm3(0.22, -0.68, -0.7), radius: 0.15, depth: 0.22, rim: 0.3, rays: 0.42 },
+    ],
+    texCraterCount: 95,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.12,
+    craterDepthScale: 0.26,
+    brightCraterFloor: 0.34,
+    brightRayFraction: 0.14,
+    baseColor: [0.74, 0.79, 0.84], // Bright crystalline water-ice & ammonia-hydrate "Anti-Pluto"
+    highColor: [0.93, 0.96, 0.99],
+    lowColor: [0.46, 0.52, 0.58],
+    macroFreq: 2.5,
+    detailFreq: 11.0,
+    ridgeMix: 0.36,
+    noiseContrast: 0.44,
+    microRoughness: 0.18,
+    normalStrength: 1.3,
+    baseGloss: 0.36,
+    iceGlossBoost: 0.38,
+    patches: [
+      // Cryovolcanic fresh ammonia-water ice resurfaced plains
+      { dir: norm3(-0.34, 0.52, 0.78), radius: 0.48, softness: 0.62, color: [0.89, 0.94, 0.98], height: -0.08, gloss: 0.56, noiseMix: 0.48 },
+      { dir: norm3(0.56, -0.42, -0.71), radius: 0.42, softness: 0.6, color: [0.54, 0.56, 0.6], gloss: 0.18, noiseMix: 0.52 },
+    ],
+    lineae: makeLineaeSet(9048, 8, [0.008, 0.018], [0.14, 0.26], [0.54, 0.64, 0.74]),
+  },
+  Vanth: {
+    id: 'Vanth',
+    seed: 90483,
+    customShape: true,
+    scaleXYZ: [1.03, 0.96, 1.01],
+    roughness: 0.022,
+    geoCraterCount: 12,
+    specialCraters: [
+      { dir: norm3(0.58, -0.34, 0.74), radius: 0.26, depth: 0.048, rim: 0.32 },
+      { dir: norm3(-0.68, 0.28, -0.68), radius: 0.22, depth: 0.04, rim: 0.28 },
+    ],
+    texCraterCount: 115,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.13,
+    craterDepthScale: 0.32,
+    baseColor: [0.46, 0.33, 0.29], // Striking dark reddish tholin contrast against bright icy Orcus!
+    highColor: [0.64, 0.48, 0.42],
+    lowColor: [0.26, 0.17, 0.15],
+    macroFreq: 2.8,
+    detailFreq: 12.5,
+    ridgeMix: 0.38,
+    noiseContrast: 0.46,
+    microRoughness: 0.26,
+    normalStrength: 1.55,
+    baseGloss: 0.08,
+  },
+  Quaoar: {
+    id: 'Quaoar',
+    seed: 50000,
+    customShape: false,
+    scaleXYZ: [1, 1, 1],
+    roughness: 0.01,
+    geoCraterCount: 0,
+    specialCraters: [
+      {
+        dir: norm3(0.62, 0.26, 0.74),
+        radius: 0.19,
+        depth: 0.26,
+        peak: 0.07,
+        rim: 0.34,
+        floorTint: [0.86, 0.82, 0.8],
+        rays: 0.38,
+      },
+      { dir: norm3(-0.68, -0.38, 0.63), radius: 0.22, depth: 0.25, rim: 0.28 },
+    ],
+    texCraterCount: 90,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.12,
+    craterDepthScale: 0.26,
+    brightCraterFloor: 0.22,
+    baseColor: [0.64, 0.39, 0.31], // Warm terracotta-ochre crystalline water-ice & methane frost
+    highColor: [0.84, 0.62, 0.52],
+    lowColor: [0.38, 0.2, 0.16],
+    macroFreq: 2.5,
+    detailFreq: 11.0,
+    ridgeMix: 0.38,
+    noiseContrast: 0.5,
+    microRoughness: 0.2,
+    normalStrength: 1.35,
+    baseGloss: 0.2,
+    iceGlossBoost: 0.32,
+    patches: [
+      // Bright methane/ethane & crystalline water-ice frost plains (JWST / Gemini)
+      { dir: norm3(-0.36, 0.64, 0.68), radius: 0.44, softness: 0.65, color: [0.87, 0.78, 0.74], gloss: 0.44, noiseMix: 0.52 },
+      { dir: norm3(0.52, -0.56, -0.64), radius: 0.38, softness: 0.62, color: [0.82, 0.71, 0.66], gloss: 0.38, noiseMix: 0.48 },
+      { dir: norm3(-0.76, 0.08, -0.64), radius: 0.4, softness: 0.58, color: [0.42, 0.21, 0.17], gloss: 0.08, noiseMix: 0.45 },
+    ],
+    lineae: makeLineaeSet(5007, 5, [0.006, 0.011], [0.08, 0.14], [0.46, 0.28, 0.24]),
+  },
+  Weywot: {
+    id: 'Weywot',
+    seed: 50001,
+    customShape: true,
+    scaleXYZ: [1.14, 0.88, 0.96],
+    roughness: 0.068,
+    facetStrength: 0.05,
+    geoCraterCount: 12,
+    specialCraters: [{ dir: norm3(0.54, 0.4, 0.74), radius: 0.34, depth: 0.072, rim: 0.3 }],
+    texCraterCount: 95,
+    craterMinRad: 0.02,
+    craterMaxRad: 0.14,
+    craterDepthScale: 0.32,
+    baseColor: [0.54, 0.41, 0.36],
+    highColor: [0.7, 0.56, 0.5],
+    lowColor: [0.3, 0.22, 0.19],
+    macroFreq: 3.1,
+    detailFreq: 13.0,
+    ridgeMix: 0.42,
+    noiseContrast: 0.44,
+    microRoughness: 0.28,
+    normalStrength: 1.6,
+    baseGloss: 0.08,
+  },
+  Arrokoth: {
+    id: 'Arrokoth',
+    seed: 486958,
+    customShape: true,
+    arrokothShape: true,
+    scaleXYZ: [1.46, 0.92, 0.98], // Asymmetric flattened New Horizons snowman contact binary!
+    roughness: 0.044,
+    facetStrength: 0.02,
+    geoCraterCount: 8,
+    specialCraters: [
+      // Iconic 7 km Sky (Maryland) crater on smaller lobe Weeyo!
+      {
+        dir: norm3(0.84, 0.16, 0.52),
+        radius: 0.32,
+        depth: 0.088,
+        rim: 0.34,
+        floorTint: [0.74, 0.46, 0.36],
+      },
+      // Shallow pits on Wenu
+      { dir: norm3(-0.62, 0.24, 0.75), radius: 0.18, depth: 0.036, rim: 0.24 },
+      { dir: norm3(-0.74, -0.3, -0.6), radius: 0.2, depth: 0.038, rim: 0.24 },
+    ],
+    texCraterCount: 65,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.1,
+    craterDepthScale: 0.24,
+    baseColor: [0.56, 0.27, 0.2], // Deep New Horizons ultra-red brick tholin!
+    highColor: [0.76, 0.45, 0.35],
+    lowColor: [0.34, 0.14, 0.11],
+    macroFreq: 2.7,
+    detailFreq: 11.5,
+    ridgeMix: 0.34,
+    noiseContrast: 0.48,
+    microRoughness: 0.24,
+    normalStrength: 1.5,
+    baseGloss: 0.06,
+  },
+  Gonggong: {
+    id: 'Gonggong',
+    seed: 225088,
+    customShape: false,
+    scaleXYZ: [1, 1, 1],
+    roughness: 0.01,
+    geoCraterCount: 0,
+    specialCraters: [
+      {
+        dir: norm3(0.58, 0.3, 0.76),
+        radius: 0.19,
+        depth: 0.27,
+        peak: 0.07,
+        rim: 0.34,
+        floorTint: [0.84, 0.74, 0.72],
+        rays: 0.42,
+      },
+      { dir: norm3(-0.68, -0.28, -0.68), radius: 0.21, depth: 0.24, rim: 0.28 },
+    ],
+    texCraterCount: 85,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.12,
+    craterDepthScale: 0.26,
+    brightCraterFloor: 0.22,
+    baseColor: [0.6, 0.26, 0.21], // One of the reddest large worlds in the Solar System!
+    highColor: [0.82, 0.46, 0.38],
+    lowColor: [0.32, 0.11, 0.1],
+    macroFreq: 2.4,
+    detailFreq: 10.5,
+    ridgeMix: 0.36,
+    noiseContrast: 0.54,
+    microRoughness: 0.2,
+    normalStrength: 1.35,
+    baseGloss: 0.18,
+    iceGlossBoost: 0.34,
+    patches: [
+      // Pale water-ice & methane frost basins detected by Hubble/JWST
+      { dir: norm3(-0.28, 0.72, 0.63), radius: 0.44, softness: 0.65, color: [0.88, 0.78, 0.75], gloss: 0.48, noiseMix: 0.5 },
+      { dir: norm3(0.42, -0.68, -0.6), radius: 0.38, softness: 0.62, color: [0.84, 0.7, 0.68], gloss: 0.42, noiseMix: 0.5 },
+      { dir: norm3(-0.74, 0.12, 0.66), radius: 0.46, softness: 0.55, color: [0.38, 0.14, 0.12], gloss: 0.06, noiseMix: 0.48 },
+    ],
+    lineae: makeLineaeSet(2251, 7, [0.008, 0.016], [0.12, 0.22], [0.42, 0.18, 0.16]),
+  },
+  Xiangliu: {
+    id: 'Xiangliu',
+    seed: 225089,
+    customShape: true,
+    scaleXYZ: [1.16, 0.86, 0.94],
+    roughness: 0.072,
+    facetStrength: 0.052,
+    geoCraterCount: 12,
+    specialCraters: [{ dir: norm3(0.6, -0.32, 0.73), radius: 0.35, depth: 0.074, rim: 0.3 }],
+    texCraterCount: 95,
+    craterMinRad: 0.02,
+    craterMaxRad: 0.14,
+    craterDepthScale: 0.32,
+    baseColor: [0.48, 0.28, 0.25],
+    highColor: [0.66, 0.42, 0.38],
+    lowColor: [0.25, 0.13, 0.12],
+    macroFreq: 3.1,
+    detailFreq: 13.0,
+    ridgeMix: 0.44,
+    noiseContrast: 0.46,
+    microRoughness: 0.28,
+    normalStrength: 1.6,
+    baseGloss: 0.09,
+  },
+  Farfarout: {
+    id: 'Farfarout',
+    seed: 201837,
+    customShape: true,
+    scaleXYZ: [1.06, 0.92, 1.02],
+    roughness: 0.03,
+    facetStrength: 0.02,
+    geoCraterCount: 12,
+    specialCraters: [
+      { dir: norm3(0.62, 0.36, 0.7), radius: 0.24, depth: 0.048, rim: 0.3, floorTint: [0.86, 0.89, 0.95] },
+      { dir: norm3(-0.7, -0.22, -0.68), radius: 0.22, depth: 0.042, rim: 0.28 },
+    ],
+    texCraterCount: 105,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.13,
+    craterDepthScale: 0.28,
+    brightCraterFloor: 0.24,
+    baseColor: [0.64, 0.67, 0.74], // Distant twilight icy-slate & subtle frosted peach
+    highColor: [0.85, 0.88, 0.95],
+    lowColor: [0.38, 0.41, 0.48],
+    macroFreq: 2.7,
+    detailFreq: 11.5,
+    ridgeMix: 0.36,
+    noiseContrast: 0.42,
+    microRoughness: 0.22,
+    normalStrength: 1.45,
+    baseGloss: 0.24,
+    iceGlossBoost: 0.3,
+    patches: [
+      { dir: norm3(-0.4, 0.56, 0.72), radius: 0.46, softness: 0.65, color: [0.76, 0.7, 0.72], gloss: 0.3, noiseMix: 0.55 },
+    ],
+  },
+  VP113: {
+    id: 'VP113',
+    seed: 2012113,
+    customShape: false,
+    scaleXYZ: [1, 1, 1],
+    roughness: 0.012,
+    geoCraterCount: 0,
+    specialCraters: [
+      {
+        dir: norm3(0.56, 0.38, 0.74),
+        radius: 0.18,
+        depth: 0.24,
+        rim: 0.3,
+        floorTint: [0.94, 0.9, 0.92],
+        rays: 0.4,
+      },
+      { dir: norm3(-0.66, -0.34, 0.67), radius: 0.2, depth: 0.24, rim: 0.28 },
+    ],
+    texCraterCount: 90,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.12,
+    craterDepthScale: 0.25,
+    brightCraterFloor: 0.26,
+    baseColor: [0.76, 0.62, 0.62], // Pale rose-pink & frosty ivory sednoid (Trujillo & Sheppard 2014)
+    highColor: [0.93, 0.84, 0.84],
+    lowColor: [0.5, 0.37, 0.38],
+    macroFreq: 2.4,
+    detailFreq: 10.5,
+    ridgeMix: 0.34,
+    noiseContrast: 0.42,
+    microRoughness: 0.18,
+    normalStrength: 1.25,
+    baseGloss: 0.28,
+    iceGlossBoost: 0.34,
+    patches: [
+      { dir: norm3(-0.34, 0.62, 0.71), radius: 0.48, softness: 0.68, color: [0.92, 0.87, 0.88], gloss: 0.46, noiseMix: 0.52 },
+      { dir: norm3(0.62, -0.44, -0.65), radius: 0.44, softness: 0.6, color: [0.64, 0.44, 0.44], gloss: 0.16, noiseMix: 0.5 },
+    ],
+    lineae: makeLineaeSet(2012, 5, [0.008, 0.015], [0.1, 0.2], [0.58, 0.42, 0.44]),
+  },
+  Sedna: {
+    id: 'Sedna',
+    seed: 90377,
+    customShape: false,
+    scaleXYZ: [1, 1, 1],
+    roughness: 0.01,
+    geoCraterCount: 0,
+    specialCraters: [
+      {
+        dir: norm3(0.62, 0.28, 0.73),
+        radius: 0.19,
+        depth: 0.28,
+        peak: 0.08,
+        rim: 0.34,
+        floorTint: [0.88, 0.76, 0.72],
+        rays: 0.46,
+      },
+      { dir: norm3(-0.7, -0.26, 0.66), radius: 0.23, depth: 0.26, rim: 0.3 },
+      { dir: norm3(0.18, -0.74, -0.65), radius: 0.17, depth: 0.24, rim: 0.28 },
+    ],
+    texCraterCount: 85,
+    craterMinRad: 0.018,
+    craterMaxRad: 0.12,
+    craterDepthScale: 0.26,
+    brightCraterFloor: 0.22,
+    baseColor: [0.58, 0.22, 0.16], // Iconic deep Mars-crimson irradiated hydrocarbon tholin!
+    highColor: [0.8, 0.4, 0.28],
+    lowColor: [0.28, 0.09, 0.07],
+    macroFreq: 2.3,
+    detailFreq: 10.5,
+    ridgeMix: 0.38,
+    noiseContrast: 0.56,
+    microRoughness: 0.2,
+    normalStrength: 1.38,
+    baseGloss: 0.16,
+    iceGlossBoost: 0.38,
+    patches: [
+      // Ethane/methane/acetylene pale frozen frost basins (JWST 2024)
+      { dir: norm3(-0.32, 0.68, 0.66), radius: 0.42, softness: 0.64, color: [0.88, 0.76, 0.7], height: -0.06, gloss: 0.48, noiseMix: 0.52 },
+      { dir: norm3(0.46, -0.62, -0.63), radius: 0.36, softness: 0.62, color: [0.84, 0.68, 0.62], gloss: 0.4, noiseMix: 0.5 },
+      // Deep ancient irradiated crimson highland
+      { dir: norm3(-0.76, 0.06, -0.64), radius: 0.52, softness: 0.58, color: [0.36, 0.11, 0.09], height: 0.1, gloss: 0.06, noiseMix: 0.48 },
+    ],
+    lineae: makeLineaeSet(9037, 8, [0.008, 0.017], [0.14, 0.24], [0.78, 0.56, 0.48]),
   },
 
   // ======================= MARS MOONS =======================
@@ -2047,7 +2670,20 @@ export function buildDetailedBodyGeometry(
     }
 
     disp = Math.max(0.45, disp)
-    pos.setXYZ(i, nx * disp * sx, ny * disp * sy, nz * disp * sz)
+    let axMul = 1
+    let ayMul = 1
+    let azMul = 1
+    if (spec.arrokothShape) {
+      // NASA New Horizons flattened asymmetric contact binary (Wenu on -X, Weeyo on +X, bright collar at nx ≈ 0.16)
+      const neck = Math.exp(-(((nx - 0.16) / 0.19) ** 2))
+      const smallSide = smoothstep(-0.08, 0.36, nx)
+      const lobeEnv = 1.0 - 0.26 * smallSide
+      const pinch = 1.0 - 0.56 * neck
+      ayMul = lobeEnv * pinch * (0.62 + 0.14 * smallSide)
+      azMul = lobeEnv * pinch
+      axMul = 1.0 - 0.08 * neck
+    }
+    pos.setXYZ(i, nx * disp * sx * axMul, ny * disp * sy * ayMul, nz * disp * sz * azMul)
   }
 
   geo.computeVertexNormals()
@@ -2145,10 +2781,10 @@ interface SynthesisContext {
   spec: BodyDetailSpec
   width: number
   height: number
-  albedoData: Uint8ClampedArray
+  albedoData: Uint8ClampedArray<ArrayBuffer>
   heightField: Float32Array
-  specData: Uint8ClampedArray | null
-  emissiveData: Uint8ClampedArray | null
+  specData: Uint8ClampedArray<ArrayBuffer> | null
+  emissiveData: Uint8ClampedArray<ArrayBuffer> | null
   basePixels: ImageData | null
   cratersByBand: TexCrater[][]
   bandCount: number
@@ -2531,6 +3167,27 @@ function processRow(ctx: SynthesisContext, y: number) {
         // Smooth basin floor with subtle polygonal trenches
         h = h * (1 - heart * 0.82) + (0.42 - cellEdge * 0.05) * (heart * 0.82)
         gloss = gloss * (1 - heart) + 0.52 * heart
+      }
+    }
+
+    // 2b2. Arrokoth bright fine-grained contact collar + mottled Wenu geological subunits (New Horizons 2019)
+    if (spec.arrokothShape) {
+      const neckCollar = Math.exp(-(((nx - 0.16 + (nMacro - 0.5) * 0.06) / 0.1) ** 2))
+      if (neckCollar > 0.02) {
+        const m = neckCollar * (0.62 + 0.38 * nMacro)
+        r = r * (1 - m) + 0.86 * m
+        g = g * (1 - m) + 0.64 * m
+        b = b * (1 - m) + 0.52 * m
+        h -= neckCollar * 0.14
+      }
+      if (nx < 0.12) {
+        const wenuMask = 1 - smoothstep(-0.15, 0.12, nx)
+        const [d1, d2] = voronoi3(nx * 5.2, ny * 5.2, nz * 5.2, spec.seed + 404)
+        const subunitRim = (1 - smoothstep(0.0, 0.24, d2 - d1)) * wenuMask
+        r = r * (1 - subunitRim * 0.28) + 0.72 * subunitRim * 0.28
+        g = g * (1 - subunitRim * 0.28) + 0.44 * subunitRim * 0.28
+        b = b * (1 - subunitRim * 0.28) + 0.34 * subunitRim * 0.28
+        h += subunitRim * 0.09
       }
     }
 
@@ -2943,34 +3600,10 @@ function processRow(ctx: SynthesisContext, y: number) {
   }
 }
 
-function finalizeSynthesis(
-  ctx: SynthesisContext,
-  maxAnisotropy: number,
-  keepPixels: boolean,
-): SynthesizedMaps {
-  const { width, height, albedoData, heightField, specData, emissiveData, spec } = ctx
-
-  // 1. Albedo texture
-  const albedoCanvas = document.createElement('canvas')
-  albedoCanvas.width = width
-  albedoCanvas.height = height
-  const aCtx = albedoCanvas.getContext('2d')!
-  const aImg = new ImageData(new Uint8ClampedArray(albedoData), width, height)
-  aCtx.putImageData(aImg, 0, 0)
-  const albedo = new T.CanvasTexture(albedoCanvas)
-  albedo.colorSpace = T.SRGBColorSpace
-  albedo.wrapS = T.RepeatWrapping
-  albedo.wrapT = T.ClampToEdgeWrapping
-  albedo.anisotropy = maxAnisotropy
-  albedo.needsUpdate = true
-
-  // 2. Tangent-space Normal Map derived from spherical height field via latitude-corrected Sobel
-  const normalCanvas = document.createElement('canvas')
-  normalCanvas.width = width
-  normalCanvas.height = height
-  const nCtx = normalCanvas.getContext('2d')!
-  const nImg = nCtx.createImageData(width, height)
-  const nData = nImg.data
+function finishPixels(ctx: SynthesisContext) {
+  const { width, height, heightField, spec } = ctx
+  const normal = new ImageData(width, height)
+  const nData = normal.data
   const strength = spec.normalStrength * (width / 512) * 1.45
 
   for (let y = 0; y < height; y++) {
@@ -2998,52 +3631,53 @@ function finalizeSynthesis(
       nData[o4 + 3] = 255
     }
   }
-  nCtx.putImageData(nImg, 0, 0)
-  const normal = new T.CanvasTexture(normalCanvas)
-  normal.colorSpace = T.NoColorSpace
-  normal.wrapS = T.RepeatWrapping
-  normal.wrapT = T.ClampToEdgeWrapping
-  normal.anisotropy = maxAnisotropy
-  normal.needsUpdate = true
-
-  // 3. Optional Specular / Gloss Map
-  let specular: T.CanvasTexture | null = null
-  if (specData) {
-    const sCanvas = document.createElement('canvas')
-    sCanvas.width = width
-    sCanvas.height = height
-    const sCtx = sCanvas.getContext('2d')!
-    sCtx.putImageData(new ImageData(new Uint8ClampedArray(specData), width, height), 0, 0)
-    specular = new T.CanvasTexture(sCanvas)
-    specular.colorSpace = T.NoColorSpace
-    specular.wrapS = T.RepeatWrapping
-    specular.wrapT = T.ClampToEdgeWrapping
-    specular.anisotropy = maxAnisotropy
-    specular.needsUpdate = true
+  return {
+    albedo: new ImageData(ctx.albedoData, width, height),
+    normal,
+    specular: ctx.specData && new ImageData(ctx.specData, width, height),
+    emissive: ctx.emissiveData && new ImageData(ctx.emissiveData, width, height),
   }
+}
 
-  // 4. Optional Emissive Map (Io glowing volcanic calderas)
-  let emissive: T.CanvasTexture | null = null
-  if (emissiveData) {
-    const eCanvas = document.createElement('canvas')
-    eCanvas.width = width
-    eCanvas.height = height
-    const eCtx = eCanvas.getContext('2d')!
-    eCtx.putImageData(new ImageData(new Uint8ClampedArray(emissiveData), width, height), 0, 0)
-    emissive = new T.CanvasTexture(eCanvas)
-    emissive.colorSpace = T.SRGBColorSpace
-    emissive.wrapS = T.RepeatWrapping
-    emissive.wrapT = T.ClampToEdgeWrapping
-    emissive.anisotropy = maxAnisotropy
-    emissive.needsUpdate = true
+export interface MapRequest {
+  spec: BodyDetailSpec
+  width: number
+  height: number
+  basePixels: ImageData | null
+  includeSpecular: boolean
+}
+export function synthesizePixels({ spec, width, height, basePixels, includeSpecular }: MapRequest) {
+  const ctx = createSynthesisContext(spec, width, height, basePixels, includeSpecular)
+  for (let y = 0; y < height; y++) processRow(ctx, y)
+  return finishPixels(ctx)
+}
+
+export function texturesFromPixels(
+  pixels: ReturnType<typeof finishPixels>,
+  maxAnisotropy: number,
+  keepPixels: boolean,
+): SynthesizedMaps {
+  function texture(image: ImageData, space: T.ColorSpace) {
+    const canvas = document.createElement('canvas')
+    canvas.width = image.width
+    canvas.height = image.height
+    canvas.getContext('2d')!.putImageData(image, 0, 0)
+    const map = new T.CanvasTexture(canvas)
+    map.colorSpace = space
+    map.wrapS = T.RepeatWrapping
+    map.anisotropy = maxAnisotropy
+    return map
   }
-
+  const albedo = texture(pixels.albedo, T.SRGBColorSpace)
+  const normal = texture(pixels.normal, T.NoColorSpace)
+  const specular = pixels.specular && texture(pixels.specular, T.NoColorSpace)
+  const emissive = pixels.emissive && texture(pixels.emissive, T.SRGBColorSpace)
   return {
     albedo,
     normal,
     specular,
     emissive,
-    albedoPixels: keepPixels ? aImg : undefined,
+    albedoPixels: keepPixels ? pixels.albedo : undefined,
     dispose() {
       albedo.dispose()
       normal.dispose()
@@ -3093,7 +3727,7 @@ export function synthesizeBodyMapsAsync(
       timer = window.setTimeout(step, 0)
       return
     }
-    const maps = finalizeSynthesis(ctx, aniso, !!options.keepPixels)
+    const maps = texturesFromPixels(finishPixels(ctx), aniso, !!options.keepPixels)
     if (cancelled) {
       maps.dispose()
       return
@@ -3115,9 +3749,8 @@ export function synthesizeBodyMapsSync(
   height: number,
   maxAnisotropy = 4,
 ): SynthesizedMaps {
-  const ctx = createSynthesisContext(spec, width, height, null, false)
-  for (let y = 0; y < height; y++) processRow(ctx, y)
-  return finalizeSynthesis(ctx, maxAnisotropy, false)
+  const pixels = synthesizePixels({ spec, width, height, basePixels: null, includeSpecular: false })
+  return texturesFromPixels(pixels, maxAnisotropy, false)
 }
 
 /** Extracts ImageData from an existing loaded Three.js Texture's image, if available. */

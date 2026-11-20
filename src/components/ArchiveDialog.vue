@@ -3,6 +3,7 @@ import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import type { Atlas } from '../scene/atlas'
 import { normalized } from '../data/archive'
 import { deepGroups, type ArchiveEntry, type Group } from '../scene/types'
+
 const { atlas } = defineProps<{ atlas: Atlas }>()
 const dialog = useTemplateRef('dialog'),
   browseButton = useTemplateRef('browseButton'),
@@ -13,6 +14,7 @@ const group = ref<Group | '全部'>(deepGroups[0]),
   query = ref(''),
   observing = ref(false),
   current = shallowRef<ArchiveEntry | null>(null)
+
 const items = computed(() => {
   const needle = normalized(query.value.trim())
   return atlas.entries.filter(
@@ -25,6 +27,7 @@ const items = computed(() => {
         : !e.moon || e.featured),
   )
 })
+
 watch(items, (entries) => {
   if (!current.value || !entries.includes(current.value)) current.value = entries[0] ?? null
   if (list.value) list.value.scrollTop = 0
@@ -32,6 +35,7 @@ watch(items, (entries) => {
 watch(current, () => {
   if (detail.value) detail.value.scrollTop = 0
 })
+
 function filter(tab: (typeof tabs)[number]) {
   group.value = tab
   query.value = ''
@@ -82,22 +86,33 @@ defineExpose({ open })
     :class="{ observing }"
     @click.self="backdrop"
   >
+    <div class="dialog-kicker">ASTRO ARCHIVE // 深空星图数据库</div>
     <div class="dialog-head">
       <h2 id="archiveTitle">{{ observing ? group + '档案' : '星图档案' }}</h2>
       <div class="archive-actions">
         <button ref="browseButton" id="browseArchive" :hidden="!observing" @click="browse">
           浏览目录</button
-        ><button id="archiveClose" aria-label="关闭星图档案" @click="dialog?.close()">×</button>
+        ><button id="archiveClose" aria-label="关闭星图档案" @click="dialog?.close()">
+          <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </button>
       </div>
     </div>
-    <input
-      id="archiveSearch"
-      type="search"
-      aria-label="搜索全部星图档案"
-      placeholder="搜索星系、恒星、行星、卫星或编号"
-      v-model="query"
-      @input="group = '全部'"
-    />
+    <div class="archive-search-wrap" :hidden="observing">
+      <svg class="search-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="7.2" cy="7.2" r="4.6" stroke="currentColor" stroke-width="1.35" />
+        <path d="M10.7 10.7L13.5 13.5" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" />
+      </svg>
+      <input
+        id="archiveSearch"
+        type="search"
+        aria-label="搜索全部星图档案"
+        placeholder="搜索星系、恒星、行星、卫星或编号"
+        v-model="query"
+        @input="group = '全部'"
+      />
+    </div>
     <div id="archiveTabs" role="group" aria-label="档案分类">
       <button v-for="tab in tabs" :key="tab" :aria-pressed="group === tab" @click="filter(tab)">
         {{ tab }}
@@ -145,8 +160,12 @@ defineExpose({ open })
               >
             </dl>
             <div class="entry-actions">
-              <button @click="visit(current)">进入三维视图</button
-              ><button v-if="!observing && !current.object" @click="open(current)">
+              <button class="btn-primary" @click="visit(current)">
+                <span>进入三维视图</span>
+                <svg class="ui-ico-xs" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg></button
+              ><button class="btn-ghost" v-if="!observing && !current.object" @click="open(current)">
                 展开观测图</button
               ><a :href="current.source" target="_blank" rel="noopener">来源资料 ↗</a>
             </div>

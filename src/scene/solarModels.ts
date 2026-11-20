@@ -1,4 +1,5 @@
 import * as T from 'three'
+import { createMapSynthesizer } from './mapSynthesizer'
 import { assignMoonNames, declinations, featured, type createSolarSystem } from '../data/solar'
 import { createAsteroidBelts } from './belts'
 import {
@@ -7,17 +8,20 @@ import {
   getBodyDetailSpec,
   hasCustomShape,
   isProceduralDetailBody,
-  synthesizeBodyMapsAsync,
   synthesizeBodyMapsSync,
   type SynthesizedMaps,
 } from './bodyDetail'
 import {
   atmosphereSpec,
   createAtmosphereMesh,
+  createCharikloRings,
+  createChironComa,
+  createChironRings,
   createEarthCloudsMaterial,
   createEnceladusPlumeMesh,
   createHaumeaRing,
   createMinorMoonMaterial,
+  createQuaoarRings,
   createUranusRings,
   createVenusHazeMaterial,
   planetMaterial,
@@ -27,6 +31,18 @@ import {
   ringOuter,
   shadeSaturn,
 } from './planetSurfaces'
+import {
+  cosmicSkyFragment,
+  cosmicSkyVertex,
+  dynamicStarsFragment,
+  dynamicStarsVertex,
+  shootingStarsFragment,
+  shootingStarsVertex,
+  sunCoronaFragment,
+  sunCoronaVertex,
+  sunSurfaceFragment,
+  sunSurfaceVertex,
+} from './shaders'
 import type { Moon, World } from './types'
 import { rad, tau, v3, seeded, orbit, orbitPoint, orbitalPosition, type Orbit } from './math'
 
@@ -34,10 +50,20 @@ export function createSolarModels(
   scene: T.Scene,
   webgl: boolean,
   textures: Record<string, T.Texture | null>,
-  { worlds, planets, mainBand, outerBand }: ReturnType<typeof createSolarSystem>,
+  {
+    worlds,
+    planets,
+    mainBand,
+    hildaBand,
+    centaurBands,
+    outerBand,
+    scatteredBand,
+    oortBand,
+  }: ReturnType<typeof createSolarSystem>,
   tag: (name: string, cls?: string) => HTMLSpanElement,
   requestDraw: () => void = () => {},
 ) {
+  const synthesis = createMapSynthesizer()
   const random = seeded(18474)
   const sphere = new T.SphereGeometry(1, 72, 48)
   const moonGeometry = new T.SphereGeometry(1, 64, 44)
@@ -56,28 +82,60 @@ export function createSolarModels(
   let cancelActiveMid: (() => void) | null = null
   let midQueueDisposed = false
 
+  const spaceTime = { value: 0 }
+  const starPixelRatio = { value: 1 }
+  const skyMapUniform: { value: T.Texture | null } = { value: textures.Sky }
+  const hasSkyMapUniform = { value: 0 }
+
+  function createSunMaterial() {
+    if (!webgl) {
+      return new T.MeshBasicMaterial({ map: textures.Sun, color: new T.Color(1.26, 1.16, 0.96) })
+    }
+    return new T.ShaderMaterial({
+      vertexShader: sunSurfaceVertex,
+      fragmentShader: sunSurfaceFragment,
+      uniforms: {
+        uMap: { value: textures.Sun },
+        uTime: spaceTime,
+      },
+    })
+  }
+
   function globe(id: string, r: number) {
+    const tex = textures[id] ?? null
+    const needsProcMid =
+      webgl &&
+      id !== 'Sun' &&
+      isProceduralDetailBody(id) &&
+      (!tex || id === 'Ceres' || id === 'Vesta' || id === 'Pallas' || id === 'Juno' || id === 'Hygiea')
     const material =
       id === 'Sun'
-        ? new T.MeshBasicMaterial({ map: textures.Sun, color: new T.Color(1.38, 1.28, 1.06) })
-        : planetMaterial(
-            id,
-            textures[id],
-            id === 'Earth' ? { cloudMap: textures.Clouds } : undefined,
-          )
+        ? createSunMaterial()
+        : planetMaterial(id, tex, id === 'Earth' ? { cloudMap: textures.Clouds } : undefined)
+    if (needsProcMid && !tex && material instanceof T.MeshPhongMaterial) {
+      const [br, bg, bb] = getBodyDetailSpec(id).baseColor
+      material.color.setRGB(br, bg, bb)
+    }
     const mesh = new T.Mesh(geometryFor(id, sphere), material)
     mesh.scale.set(r, r * polarRatio(id), r)
-    if (
-      webgl &&
-      (id === 'Ceres' || id === 'Vesta' || id === 'Pallas' || id === 'Juno' || id === 'Hygiea')
-    ) {
+    if (needsProcMid) {
       midSynthesisQueue.push({ id, mesh })
     }
     return mesh
   }
   const orbitLayer = new T.Group()
   scene.add(orbitLayer)
-  const orbitColors = { planet: 0x8794a4, small: 0x92a7b7, moon: 0x90a0ad, focus: 0xffc482 }
+  const orbitColors = {
+    planet: 0x6f8eb0,
+    small: 0x6b94b8,
+    main: 0x9b8d72,
+    trojan: 0xa68d64,
+    centaur: 0x66a4ab,
+    outer: 0x6b94b8,
+    scattered: 0x8b86d0,
+    moon: 0x7b98b2,
+    focus: 0x67e4ff,
+  }
   const planetDiscs = planets.map(() => v3(0, 0, -1))
   function pathFor(orbits: Orbit[], color: number, steps = 144, host: World | null = null) {
     const vertices = new Float32Array(orbits.length * steps * 3),
@@ -134,81 +192,310 @@ export function createSolarModels(
     mesh: globe('Sun', 8.4),
   }
   scene.add(sun.mesh)
-  function makeGlow() {
-    const c = document.createElement('canvas')
-    c.width = c.height = 256
-    const k = c.getContext('2d')!,
-      grad = k.createRadialGradient(128, 128, 0, 128, 128, 128)
-    for (const [stop, color] of [
-      [0, 'rgba(255,249,214,1)'],
-      [0.17, 'rgba(255,213,120,.86)'],
-      [0.25, 'rgba(255,165,53,.52)'],
-      [0.42, 'rgba(255,137,40,.18)'],
-      [0.68, 'rgba(247,117,37,.055)'],
-      [1, 'rgba(240,91,22,0)'],
-    ] as const)
-      grad.addColorStop(stop, color)
-    k.fillStyle = grad
-    k.fillRect(0, 0, 256, 256)
-    const tex = new T.CanvasTexture(c)
-    tex.colorSpace = T.SRGBColorSpace
-    const sprite = new T.Sprite(
-      new T.SpriteMaterial({
-        map: tex,
-        transparent: true,
-        depthWrite: false,
-        blending: T.AdditiveBlending,
-      }),
-    )
-    sprite.scale.setScalar(sun.r * 8.4)
-    return sprite
+  function makeSunCorona() {
+    const outerRadius = sun.r * 5.2
+    const coronaGeo = new T.SphereGeometry(1, 56, 36)
+    const coronaMat = webgl
+      ? new T.ShaderMaterial({
+          vertexShader: sunCoronaVertex,
+          fragmentShader: sunCoronaFragment,
+          side: T.BackSide,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          blending: T.AdditiveBlending,
+          uniforms: {
+            uSunRadius: { value: sun.r },
+            uOuterRadius: { value: outerRadius },
+            uTime: spaceTime,
+          },
+        })
+      : new T.MeshBasicMaterial({ visible: false })
+    const mesh = new T.Mesh(coronaGeo, coronaMat)
+    mesh.scale.setScalar(outerRadius)
+    mesh.frustumCulled = false
+    mesh.renderOrder = 1
+    return mesh
   }
-  const sunGlow = makeGlow()
+  const sunGlow = makeSunCorona()
   scene.add(sunGlow)
-  const skyDome = new T.Mesh(
-    new T.SphereGeometry(2600, 40, 24),
-    new T.MeshBasicMaterial({
-      map: textures.Sky,
+
+  function createCosmicSkyMaterial(opacity = 1) {
+    return new T.ShaderMaterial({
+      vertexShader: cosmicSkyVertex,
+      fragmentShader: cosmicSkyFragment,
       side: T.BackSide,
-      color: 0x8996a9,
+      transparent: opacity < 1,
       depthWrite: false,
       fog: false,
-    }),
+      uniforms: {
+        uSkyMap: skyMapUniform,
+        uHasSkyMap: hasSkyMapUniform,
+        uTime: spaceTime,
+        uOpacity: { value: opacity },
+      },
+    })
+  }
+  const skyDome = new T.Mesh(
+    new T.SphereGeometry(3800, 48, 32),
+    webgl
+      ? createCosmicSkyMaterial(1)
+      : new T.MeshBasicMaterial({
+          map: textures.Sky,
+          side: T.BackSide,
+          color: 0x8996a9,
+          depthWrite: false,
+          fog: false,
+        }),
   )
   skyDome.rotation.set(0.4, 1.7, -0.47)
   skyDome.renderOrder = -10
   scene.add(skyDome)
-  function makeBackgroundStars(count: number) {
-    const coords = [],
-      colors = []
-    for (let i = 0; i < count; i++) {
-      const theta = random() * tau
-      const y = random() * 2 - 1,
-        r = 2100 * Math.sqrt(1 - y * y)
-      coords.push(Math.cos(theta) * r, y * 2100, Math.sin(theta) * r)
-      const shade = 0.35 + random() * 0.65
-      colors.push(shade, shade * 0.96, shade)
+
+  const starRandom = seeded(918273)
+  const spectralPalette: [number, number, number, number][] = [
+    [0.18, 0.67, 0.84, 1.0], // O/B blue-white
+    [0.42, 0.84, 0.92, 1.0], // A blue-white
+    [0.70, 0.97, 0.98, 1.0], // F crisp white
+    [0.86, 1.0, 0.93, 0.78], // G warm cream-gold
+    [0.96, 1.0, 0.80, 0.58], // K soft amber
+    [1.0, 1.0, 0.69, 0.54], // M gentle coral
+  ]
+  function sampleStarColor(r: () => number): [number, number, number] {
+    const roll = r()
+    for (const [cutoff, cr, cg, cb] of spectralPalette) {
+      if (roll <= cutoff) return [cr, cg, cb]
     }
-    const geometry = new T.BufferGeometry()
-    geometry.setAttribute('position', new T.Float32BufferAttribute(coords, 3))
-    geometry.setAttribute('color', new T.Float32BufferAttribute(colors, 3))
-    const material = new T.PointsMaterial({
-      size: 1.15,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.71,
-      depthWrite: false,
-      sizeAttenuation: false,
-    })
-    return new T.Points(geometry, material)
+    return [0.97, 0.98, 1.0]
   }
-  const stars = makeBackgroundStars(1400)
+  const galacticQuat = new T.Quaternion().setFromEuler(skyDome.rotation)
+
+  function makeStarField(count: number, minRadius: number, maxRadius: number, galacticBias: number) {
+    const coords = new Float32Array(count * 3)
+    const colors = new Float32Array(count * 3)
+    const sizes = new Float32Array(count)
+    const twinkles = new Float32Array(count * 3)
+    const heroes = new Float32Array(count)
+    const dir = v3()
+
+    for (let i = 0; i < count; i++) {
+      const inBand = starRandom() < galacticBias
+      const theta = starRandom() * tau
+      let y: number
+      if (inBand) {
+        // Concentrated smoothly along the Milky Way plane
+        y = (starRandom() + starRandom() + starRandom() - 1.5) * 0.38
+        y = Math.max(-0.98, Math.min(0.98, y))
+      } else {
+        y = starRandom() * 2 - 1
+      }
+      const flat = Math.sqrt(Math.max(0, 1 - y * y))
+      dir.set(Math.cos(theta) * flat, y, Math.sin(theta) * flat)
+      if (inBand) dir.applyQuaternion(galacticQuat)
+
+      const dist = minRadius + (maxRadius - minRadius) * Math.cbrt(starRandom())
+      const i3 = i * 3
+      coords[i3] = dir.x * dist
+      coords[i3 + 1] = dir.y * dist
+      coords[i3 + 2] = dir.z * dist
+
+      const [cr, cg, cb] = sampleStarColor(starRandom)
+      const tier = starRandom()
+      let size: number
+      let hero = 0
+      let brightness: number
+      if (tier < 0.76) {
+        size = 1.45 + starRandom() * 1.45
+        brightness = 0.42 + starRandom() * 0.48
+      } else if (tier < 0.955) {
+        size = 2.9 + starRandom() * 2.2
+        brightness = 0.68 + starRandom() * 0.32
+      } else {
+        size = 5.4 + starRandom() * 5.8
+        brightness = 0.88 + starRandom() * 0.12
+        hero = 0.45 + starRandom() * 0.55
+      }
+      colors[i3] = cr * brightness
+      colors[i3 + 1] = cg * brightness
+      colors[i3 + 2] = cb * brightness
+      sizes[i] = size
+      heroes[i] = hero
+
+      twinkles[i3] = starRandom() * tau
+      twinkles[i3 + 1] = 0.72 + starRandom() * 2.15
+      twinkles[i3 + 2] = (hero > 0 ? 0.22 : 0.14) + starRandom() * 0.30
+    }
+
+    const geometry = new T.BufferGeometry()
+    geometry.setAttribute('position', new T.BufferAttribute(coords, 3))
+    geometry.setAttribute('color', new T.BufferAttribute(colors, 3))
+    geometry.setAttribute('aSize', new T.BufferAttribute(sizes, 1))
+    geometry.setAttribute('aTwinkle', new T.BufferAttribute(twinkles, 3))
+    geometry.setAttribute('aHero', new T.BufferAttribute(heroes, 1))
+
+    const material = webgl
+      ? new T.ShaderMaterial({
+          vertexShader: dynamicStarsVertex,
+          fragmentShader: dynamicStarsFragment,
+          transparent: true,
+          depthWrite: false,
+          blending: T.AdditiveBlending,
+          uniforms: {
+            uTime: spaceTime,
+            uPixelRatio: starPixelRatio,
+            uOpacity: { value: 0.96 },
+          },
+        })
+      : new T.PointsMaterial({
+          size: 1.25,
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false,
+          sizeAttenuation: false,
+        })
+    const pts = new T.Points(geometry, material)
+    pts.frustumCulled = false
+    pts.renderOrder = -8
+    return pts
+  }
+
+  // Primary infinite celestial sphere (shared with galaxy & deep-sky views)
+  const stars = makeStarField(5200, 3200, 3200, 0.34)
   scene.add(stars)
-  const { belt, beltDust, kuiper, kuiperDust, stepBelts, disposeBelts } = createAsteroidBelts(
+
+  // World-space 3D parallax star shell around the solar system (well outside Sedna & Inner Oort Cloud)
+  const parallaxStars = makeStarField(950, 1150, 3100, 0.18)
+  scene.add(parallaxStars)
+
+  // Occasional subtle deep-space shooting star ribbons on the distant celestial sphere
+  function makeShootingStars(count: number) {
+    const startDirs = new Float32Array(count * 4 * 3)
+    const tangents = new Float32Array(count * 4 * 3)
+    const timings = new Float32Array(count * 4 * 4)
+    const corners = new Float32Array(count * 4 * 2)
+    const tints = new Float32Array(count * 4 * 3)
+    const positions = new Float32Array(count * 4 * 3)
+    const indices: number[] = []
+    const up = v3(0, 1, 0)
+    const alt = v3(1, 0, 0)
+    const sDir = v3()
+    const tA = v3()
+    const tB = v3()
+    const move = v3()
+
+    const quadCorners: [number, number][] = [
+      [0, -1],
+      [0, 1],
+      [1, 1],
+      [1, -1],
+    ]
+
+    for (let i = 0; i < count; i++) {
+      const th = starRandom() * tau
+      const sy = starRandom() * 1.5 - 0.75
+      const sr = Math.sqrt(Math.max(0.01, 1 - sy * sy))
+      sDir.set(Math.cos(th) * sr, sy, Math.sin(th) * sr).normalize()
+      tA.crossVectors(sDir, Math.abs(sDir.y) > 0.85 ? alt : up).normalize()
+      tB.crossVectors(sDir, tA).normalize()
+      const heading = starRandom() * tau
+      move.copy(tA).multiplyScalar(Math.cos(heading)).addScaledVector(tB, Math.sin(heading)).normalize()
+
+      const cycle = 15 + starRandom() * 14
+      const phase = (i / count) * cycle + starRandom() * 3.5
+      const duration = 0.78 + starRandom() * 0.45
+      const arc = 0.085 + starRandom() * 0.075
+      const [tr, tg, tb] = starRandom() < 0.7 ? [0.68, 0.90, 1.0] : [1.0, 0.92, 0.78]
+
+      const baseV = i * 4
+      for (let v = 0; v < 4; v++) {
+        const vi = baseV + v
+        sDir.toArray(startDirs, vi * 3)
+        move.toArray(tangents, vi * 3)
+        positions[vi * 3] = sDir.x * 2950
+        positions[vi * 3 + 1] = sDir.y * 2950
+        positions[vi * 3 + 2] = sDir.z * 2950
+        timings[vi * 4] = phase
+        timings[vi * 4 + 1] = cycle
+        timings[vi * 4 + 2] = duration
+        timings[vi * 4 + 3] = arc
+        corners[vi * 2] = quadCorners[v][0]
+        corners[vi * 2 + 1] = quadCorners[v][1]
+        tints[vi * 3] = tr
+        tints[vi * 3 + 1] = tg
+        tints[vi * 3 + 2] = tb
+      }
+      indices.push(baseV, baseV + 1, baseV + 2, baseV, baseV + 2, baseV + 3)
+    }
+
+    const geometry = new T.BufferGeometry()
+    geometry.setAttribute('position', new T.BufferAttribute(positions, 3))
+    geometry.setAttribute('aStartDir', new T.BufferAttribute(startDirs, 3))
+    geometry.setAttribute('aTangent', new T.BufferAttribute(tangents, 3))
+    geometry.setAttribute('aTiming', new T.BufferAttribute(timings, 4))
+    geometry.setAttribute('aCorner', new T.BufferAttribute(corners, 2))
+    geometry.setAttribute('aTint', new T.BufferAttribute(tints, 3))
+    geometry.setIndex(indices)
+
+    const material = webgl
+      ? new T.ShaderMaterial({
+          vertexShader: shootingStarsVertex,
+          fragmentShader: shootingStarsFragment,
+          side: T.DoubleSide,
+          transparent: true,
+          depthWrite: false,
+          blending: T.AdditiveBlending,
+          uniforms: { uTime: spaceTime },
+        })
+      : new T.MeshBasicMaterial({ visible: false })
+    const mesh = new T.Mesh(geometry, material)
+    mesh.frustumCulled = false
+    mesh.renderOrder = -7
+    return mesh
+  }
+  const shootingStars = makeShootingStars(6)
+  scene.add(shootingStars)
+
+  function updateSpaceTime(timeSec: number, dpr: number) {
+    spaceTime.value = timeSec
+    starPixelRatio.value = dpr
+  }
+  function setSkyTexture(tex: T.Texture) {
+    skyMapUniform.value = tex
+    hasSkyMapUniform.value = 1
+    if (!webgl && skyDome.material instanceof T.MeshBasicMaterial) {
+      skyDome.material.map = tex
+      skyDome.material.needsUpdate = true
+    }
+  }
+  const {
+    belt,
+    beltDust,
+    hildaDust,
+    trojanDust,
+    centaurDust,
+    neptuneTrojanDust,
+    kuiper,
+    kuiperDust,
+    scatteredDust,
+    oortDust,
+    setBeltsVisible,
+    updateBeltVisibility,
+    stepBelts,
+    disposeBelts,
+  } = createAsteroidBelts(
     scene,
     webgl,
-    mainBand,
-    outerBand,
+    {
+      mainBand,
+      hildaBand,
+      centaurBands,
+      outerBand,
+      scatteredBand,
+      oortBand,
+      jupiterA: planets[4].a,
+      neptuneA: planets[7].a,
+    },
     textures.Rock,
   )
   function saturnRings(r: number) {
@@ -253,6 +540,12 @@ export function createSolarModels(
     Charon: 0xb8b2ac,
     Phobos: 0xab9684,
     Deimos: 0xb1a291,
+    Queta: 0x5c5b5e,
+    Menoetius: 0x765a4d,
+    Vanth: 0x7d584d,
+    Weywot: 0x8e6b5e,
+    Xiangliu: 0x824c44,
+    Dysnomia: 0x989ca2,
   }
   const moonSurfaces: Record<string, string> = {
     Moon: 'Moon',
@@ -274,30 +567,52 @@ export function createSolarModels(
     ? createMinorMoonMaterial(minorRockMaps?.albedo ?? textures.Rock, minorRockMaps?.normal ?? null)
     : new T.MeshLambertMaterial({ color: 0xffffff, map: textures.Rock })
   const minorGeo = buildMinorInstancedGeometry()
+  minorGeo.computeBoundingSphere()
+  const minorShape = minorGeo.boundingSphere!
+  const minorRadius = minorShape.center.length() + minorShape.radius
   const matrix = new T.Matrix4()
   const localScale = v3()
   const zeroScale = v3(0, 0, 0)
+  const ownedRingTextures: T.Texture[] = []
+  function attachMinorRing(p: World, ringMesh: T.Mesh) {
+    p.minorRings = ringMesh
+    ringMesh.renderOrder = 3
+    p.axis.add(ringMesh)
+    const mat = ringMesh.material
+    if (mat instanceof T.MeshBasicMaterial && mat.map) ownedRingTextures.push(mat.map)
+  }
   for (const p of worlds) {
     p.pos = v3()
     p.orbit = orbit(p.a, p.e, p.inc, p.node, p.peri || 0)
     p.phase -= p.node * rad
-    p.path = pathFor([p.orbit], p.region ? orbitColors.small : orbitColors.planet, 280)
+    p.path = pathFor(
+      [p.orbit],
+      p.region ? orbitColors[p.region] : orbitColors.planet,
+      p.region === 'scattered' || p.region === 'outer' ? 320 : 280,
+    )
     orbitLayer.add(p.path)
     p.anchor = new T.Group()
     scene.add(p.anchor)
     p.axis = new T.Group()
-    p.axis.rotation.z = -(declinations[p.id] ?? (p.id === 'Pluto' ? 119.6 : 0)) * rad
+    p.axis.rotation.z = -(declinations[p.id] ?? 0) * rad
     p.anchor.add(p.axis)
     p.mesh = globe(p.id, p.r)
     p.axis.add(p.mesh)
     p.tag = tag(p.name)
     if (p.id === 'Haumea') {
       p.mesh.scale.multiply(v3(1.36, 0.69, 1.06))
-      if (webgl) {
-        p.minorRings = createHaumeaRing(p.r, p.axis)
-        p.minorRings.renderOrder = 3
-        p.axis.add(p.minorRings)
-      }
+      if (webgl) attachMinorRing(p, createHaumeaRing(p.r, p.axis))
+    }
+    if (p.id === 'Chariklo' && webgl) {
+      attachMinorRing(p, createCharikloRings(p.r, p.axis))
+    }
+    if (p.id === 'Chiron' && webgl) {
+      attachMinorRing(p, createChironRings(p.r, p.axis))
+      p.coma = createChironComa(p.r, sphere)
+      p.anchor.add(p.coma)
+    }
+    if (p.id === 'Quaoar' && webgl) {
+      attachMinorRing(p, createQuaoarRings(p.r, p.axis))
     }
     if (p.id === 'Saturn') {
       const rings = saturnRings(p.r)
@@ -307,9 +622,7 @@ export function createSolarModels(
       p.axis.add(rings)
     }
     if (p.id === 'Uranus' && webgl) {
-      p.minorRings = createUranusRings(p.r, p.axis)
-      p.minorRings.renderOrder = 3
-      p.axis.add(p.minorRings)
+      attachMinorRing(p, createUranusRings(p.r, p.axis))
     }
     if (p.id === 'Earth') {
       p.clouds = new T.Mesh(sphere, createEarthCloudsMaterial(textures.Clouds))
@@ -336,7 +649,7 @@ export function createSolarModels(
     const minor = p.moons.filter((m) => !major.includes(m.name))
     if (minor.length) {
       p.instances = new T.InstancedMesh(minorGeo, minorMaterial, minor.length)
-      p.instances.frustumCulled = false
+      p.instances.boundingSphere = new T.Sphere(v3(), 0)
       p.instances.instanceMatrix.setUsage(T.DynamicDrawUsage)
       p.anchor.add(p.instances)
     }
@@ -357,15 +670,24 @@ export function createSolarModels(
               : 0.076
             : 0.016 + random() * 0.009)
       if (m.name === 'Charon') m.r = p.r * 0.51
+      else if (m.name === 'Menoetius') m.r = p.r * 0.9
+      else if (m.name === 'Vanth') m.r = p.r * 0.48
+      else if (m.name === 'Dysnomia') m.r = p.r * 0.26
+      else if (m.name === 'Weywot' || m.name === 'Xiangliu') m.r = p.r * 0.14
+      else if (m.name === 'Queta') m.r = p.r * 0.16
       const rank = minA === maxA ? 1 : Math.log(m.a / minA) / Math.log(maxA / minA)
       const edge =
         p.id === 'Saturn'
           ? m.a * (1 - m.e) > 142000
             ? 2.33
             : 1.82
-          : p.id === 'Haumea'
-            ? 1.4
-            : 1.16
+          : p.id === 'Quaoar'
+            ? 3.55
+            : p.id === 'Haumea'
+              ? 1.4
+              : p.id === 'Patroclus'
+                ? 2.1
+                : 1.16
       const inner = p.r * edge + m.r * 1.25,
         outer = p.extent - m.r * 1.25
       const e = Math.min(m.e, 0.34, (0.98 * (outer - inner)) / (outer + inner))
@@ -397,6 +719,10 @@ export function createSolarModels(
         m.instance = instance++
         const minorSpec = getBodyDetailSpec(m.name, p.id, m.a)
         m.aspect = minorSpec.scaleXYZ
+        // Bound the entire orbit and every spin orientation, even while the clock is running.
+        const bound = p.instances!.boundingSphere!
+        const apoapsis = m.orbit.a * (1 + m.orbit.e)
+        bound.radius = Math.max(bound.radius, apoapsis + minorRadius * m.r * Math.max(...m.aspect))
         const az = random() * tau
         const ay = random() * 2 - 1
         const ar = Math.sqrt(Math.max(0, 1 - ay * ay))
@@ -428,7 +754,7 @@ export function createSolarModels(
     const item = midSynthesisQueue[midQueueIndex++]
     const spec = getBodyDetailSpec(item.id)
     const mat = item.mesh.material as T.MeshPhongMaterial
-    cancelActiveMid = synthesizeBodyMapsAsync(spec, 256, 128, {
+    cancelActiveMid = synthesis.run(spec, 256, 128, {
       includeSpecular: spec.baseGloss > 0.12 || (spec.iceGlossBoost ?? 0) > 0.2,
       maxAnisotropy: 4,
       budgetMs: 5,
@@ -485,6 +811,11 @@ export function createSolarModels(
     'Phobos',
     'Deimos',
     'Hiʻiaka',
+    'Menoetius',
+    'Vanth',
+    'Weywot',
+    'Xiangliu',
+    'Dysnomia',
   ])
   function writeMinorInstance(p: World, m: Moon) {
     if (m.instance === undefined || !p.instances) return
@@ -504,7 +835,6 @@ export function createSolarModels(
   }
   function modelStep(clock: number) {
     sun.mesh.rotation.y = clock * 0.045
-    stepBelts(clock)
     for (const [index, p] of worlds.entries()) {
       orbitalPosition(p.orbit, p.phase + (clock * tau) / (100 * (p.days / 365.26) ** 0.32), p.pos)
       p.anchor.position.copy(p.pos)
@@ -533,13 +863,19 @@ export function createSolarModels(
       }
       if (p.instances) p.instances.instanceMatrix.needsUpdate = true
     }
+    const jupLon = Math.atan2(-planets[4].pos.z, planets[4].pos.x)
+    const nepLon = Math.atan2(-planets[7].pos.z, planets[7].pos.x)
+    stepBelts(clock, jupLon, nepLon)
   }
   function disposeSolarExtras() {
     midQueueDisposed = true
+    synthesis.dispose()
     cancelActiveMid?.()
     cancelActiveMid = null
     minorRockMaps?.dispose()
     disposeBelts()
+    for (const tex of ownedRingTextures) tex.dispose()
+    ownedRingTextures.length = 0
     for (const maps of ownedMidMaps) maps.dispose()
     ownedMidMaps.length = 0
   }
@@ -548,11 +884,24 @@ export function createSolarModels(
     sun,
     sunGlow,
     stars,
+    parallaxStars,
+    shootingStars,
     belt,
     beltDust,
+    hildaDust,
+    trojanDust,
+    centaurDust,
+    neptuneTrojanDust,
     kuiper,
     kuiperDust,
+    scatteredDust,
+    oortDust,
+    setBeltsVisible,
+    updateBeltVisibility,
     skyDome,
+    createCosmicSkyMaterial,
+    updateSpaceTime,
+    setSkyTexture,
     sphere,
     orbitLayer,
     orbitColors,

@@ -1,14 +1,15 @@
 import * as T from 'three'
+import { createMapSynthesizer } from './mapSynthesizer'
 import { detailSources } from '../data/assets'
 import {
   buildDetailedBodyGeometry,
   extractTexturePixels,
   getBodyDetailSpec,
-  synthesizeBodyMapsAsync,
   type SynthesizedMaps,
 } from './bodyDetail'
 import { planetMaterial } from './planetSurfaces'
 import type { Moon, World } from './types'
+import type { TextureUpload } from './textureUploads'
 
 export type PlanetBody = Pick<
   World,
@@ -34,10 +35,24 @@ export function createPlanetDetail(
   renderer: T.WebGLRenderer | null,
   scene: T.Scene,
   requestDraw: () => void,
+  loadTexture: TextureUpload | null,
 ) {
+  const synthesis = createMapSynthesizer()
   const closeGeometry = renderer ? new T.SphereGeometry(1, 160, 108) : null
   const proceduralCache = new Map<string, CachedProceduralDetail>()
   const maxCacheEntries = 5
+
+  interface PhotoSet {
+    controller: AbortController
+    textures: Map<Channel, T.Texture>
+    apply?: (channel: Channel, texture: T.Texture) => void
+    failed?: boolean
+  }
+  const photos = new Map<string, PhotoSet>()
+  function disposePhotos(set: PhotoSet) {
+    set.controller.abort()
+    for (const texture of set.textures.values()) texture.dispose()
+  }
 
   let active: PlanetBody | null = null
   let release: () => void = () => {}
@@ -136,7 +151,7 @@ export function createPlanetDetail(
           requestDraw()
         }
       } else {
-        cancelSynth = synthesizeBodyMapsAsync(spec, mapW, mapH, {
+        cancelSynth = synthesis.run(spec, mapW, mapH, {
           includeSpecular: spec.baseGloss > 0.1,
           maxAnisotropy: aniso,
           keepPixels: !renderer,
@@ -219,7 +234,6 @@ export function createPlanetDetail(
 
     // Case 2: Major planets & Earth's Moon — load high-resolution photographic detail maps.
     if (hasStaticDetail) {
-      const textures: T.Texture[] = []
       const pending = new Set<HTMLImageElement>()
       if (closeGeometry) {
         mesh.geometry = closeGeometry
@@ -227,80 +241,103 @@ export function createPlanetDetail(
         if (body.haze) body.haze.geometry = closeGeometry
         if (body.atmosphere) body.atmosphere.geometry = closeGeometry
       }
-      function load(key: string, channel: Channel, srgb: boolean) {
-        const url = detailSources[key]
-        if (!url) return
-        const image = new Image()
-        pending.add(image)
-        image.onload = () => {
-          pending.delete(image)
-          if (active !== body) return
-          const maxWidth = renderer
-            ? Math.min(
-                renderer.capabilities.maxTextureSize,
-                matchMedia('(max-width:700px)').matches ? 2048 : 4096,
-              )
-            : 1024
-          let source: HTMLImageElement | HTMLCanvasElement = image
-          if (!renderer || image.width > maxWidth) {
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.min(maxWidth, image.width)
-            canvas.height = Math.max(1, Math.round((image.height * canvas.width) / image.width))
-            const ctx = canvas.getContext('2d')!
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
-            if (!renderer && channel !== 'normal')
-              pixels[channel] = ctx.getImageData(0, 0, canvas.width, canvas.height)
-            source = canvas
-          }
-          if (renderer) {
-            const texture = new T.Texture(source)
-            texture.colorSpace = srgb ? T.SRGBColorSpace : T.NoColorSpace
-            texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy())
-            texture.needsUpdate = true
-            textures.push(texture)
-            switch (channel) {
-              case 'surface':
-                surface.map = texture
-                if (baseBump && baseBump === base) surface.bumpMap = texture
-                break
-              case 'night':
-                surface.emissiveMap = texture
-                break
-              case 'water':
-                surface.specularMap = texture
-                surface.specular.setHex(0x788492)
-                break
-              case 'normal':
-                surface.normalMap = texture
-                break
-              case 'clouds':
-                if (clouds) {
-                  clouds.alphaMap = texture
-                  clouds.needsUpdate = true
-                }
-                if (earthCloudMap) earthCloudMap.value = texture
-                break
-              case 'ring':
-                if (ring) {
-                  ring.map = texture
-                }
-                break
+      function apply(channel: Channel, texture: T.Texture) {
+        switch (channel) {
+          case 'surface':
+            surface.map = texture
+            if (baseBump && baseBump === base) surface.bumpMap = texture
+            break
+          case 'night':
+            surface.emissiveMap = texture
+            break
+          case 'water':
+            surface.specularMap = texture
+            surface.specular.setHex(0x788492)
+            break
+          case 'normal':
+            surface.normalMap = texture
+            break
+          case 'clouds':
+            if (clouds) {
+              clouds.alphaMap = texture
+              clouds.needsUpdate = true
             }
-            surface.needsUpdate = true
-          }
-          requestDraw()
+            if (earthCloudMap) earthCloudMap.value = texture
+            break
+          case 'ring':
+            if (ring) ring.map = texture
+            break
         }
-        image.onerror = () => pending.delete(image)
-        image.src = url
+        surface.needsUpdate = true
+        requestDraw()
       }
-      load(body.id, 'surface', true)
-      if (body.id === 'Earth') {
-        load('EarthNight', 'night', true)
-        load('EarthWater', 'water', false)
-        load('EarthClouds', 'clouds', false)
-        if (renderer) load('EarthNormal', 'normal', false)
+      const maxWidth = renderer
+        ? Math.min(renderer.capabilities.maxTextureSize, matchMedia('(max-width:700px)').matches ? 2048 : 4096)
+        : 1024
+      const photoKey = body.id + ':' + maxWidth
+      let set = photos.get(photoKey)
+      if (set?.failed) {
+        disposePhotos(set)
+        photos.delete(photoKey)
+        set = undefined
       }
-      if (body.id === 'Saturn' && ring) load('SaturnRing', 'ring', true)
+      if (set) {
+        photos.delete(photoKey)
+        photos.set(photoKey, set)
+        set.apply = apply
+        for (const [channel, texture] of set.textures) apply(channel, texture)
+      } else {
+        if (loadTexture) {
+          // Keep the current and last photographic body across zoom threshold crossings.
+          if (photos.size >= 2) {
+            const oldest = photos.keys().next().value!
+            disposePhotos(photos.get(oldest)!)
+            photos.delete(oldest)
+          }
+          set = { controller: new AbortController(), textures: new Map(), apply }
+          photos.set(photoKey, set)
+        }
+        const load = (key: string, channel: Channel, srgb: boolean) => {
+          const url = detailSources[key]
+          if (!url) return
+          if (renderer && loadTexture && set) {
+            const entry = set
+            loadTexture(url, entry.controller.signal, {
+              maxWidth,
+              colorSpace: srgb ? T.SRGBColorSpace : T.NoColorSpace,
+              anisotropy: Math.min(4, renderer.capabilities.getMaxAnisotropy()),
+            }, (texture) => {
+              entry.textures.get(channel)?.dispose()
+              entry.textures.set(channel, texture)
+              entry.apply?.(channel, texture)
+            }, () => { entry.failed = true })
+          } else if (channel !== 'normal') {
+            const image = new Image()
+            pending.add(image)
+            image.onload = () => {
+              pending.delete(image)
+              if (active !== body) return
+              const canvas = document.createElement('canvas')
+              canvas.width = Math.min(maxWidth, image.width)
+              canvas.height = Math.max(1, Math.round(image.height * canvas.width / image.width))
+              const ctx = canvas.getContext('2d')!
+              ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+              pixels[channel] = ctx.getImageData(0, 0, canvas.width, canvas.height)
+              requestDraw()
+            }
+            image.onerror = () => pending.delete(image)
+            image.src = url
+          }
+        }
+        load(body.id, 'surface', true)
+        if (body.id === 'Earth') {
+          load('EarthNight', 'night', true)
+          load('EarthWater', 'water', false)
+          load('EarthClouds', 'clouds', false)
+          if (renderer) load('EarthNormal', 'normal', false)
+        }
+        if (body.id === 'Saturn' && ring) load('SaturnRing', 'ring', true)
+      }
       release = () => {
         for (const image of pending) {
           image.onload = null
@@ -327,7 +364,7 @@ export function createPlanetDetail(
             ring.map = ringMap
           }
           surface.needsUpdate = true
-          for (const texture of textures) texture.dispose()
+          if (set) set.apply = undefined
         }
         release = () => {}
       }
@@ -386,7 +423,7 @@ export function createPlanetDetail(
       applyProceduralMaps(cached.maps)
     } else {
       const basePixels = spec.baseImageMix ? extractTexturePixels(base, 512) : null
-      cancelSynth = synthesizeBodyMapsAsync(spec, mapW, mapH, {
+      cancelSynth = synthesis.run(spec, mapW, mapH, {
         basePixels,
         includeSpecular: spec.baseGloss > 0.12 || (spec.iceGlossBoost ?? 0) > 0.2,
         maxAnisotropy: aniso,
@@ -450,11 +487,14 @@ export function createPlanetDetail(
     pixelsFor: (id: string) => (active?.id === id ? pixels : null),
     dispose() {
       select(null)
+      synthesis.dispose()
       for (const entry of proceduralCache.values()) {
         entry.maps.dispose()
         entry.geometry?.dispose()
       }
       proceduralCache.clear()
+      for (const set of photos.values()) disposePhotos(set)
+      photos.clear()
       closeGeometry?.dispose()
     },
   }

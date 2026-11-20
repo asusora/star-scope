@@ -1,10 +1,27 @@
 import * as T from 'three'
+import { createBeltInstances, rockStride } from './beltInstances'
 import { seeded, tau } from './math'
 import { getBodyDetailSpec, synthesizeBodyMapsSync, type SynthesizedMaps } from './bodyDetail'
 
 export interface BandRange {
   inner: number
   outer: number
+}
+
+export interface BeltLayout {
+  mainBand: BandRange
+  hildaBand: BandRange
+  centaurBands: {
+    jupSat: BandRange
+    satUra: BandRange
+    uraNep: BandRange
+    full: BandRange
+  }
+  outerBand: BandRange
+  scatteredBand: BandRange
+  oortBand: BandRange
+  jupiterA: number
+  neptuneA: number
 }
 
 interface AsteroidPrototypeSpec {
@@ -55,7 +72,7 @@ function noise3(x: number, y: number, z: number, seed: number): number {
   return nx00 + (nx10 - nx00) * uy + (nx01 + (nx11 - nx01) * uy - (nx00 + (nx10 - nx00) * uy)) * uz
 }
 
-function buildAsteroidPrototype(spec: AsteroidPrototypeSpec): T.BufferGeometry {
+function buildAsteroidPrototype(spec: AsteroidPrototypeSpec): T.SphereGeometry {
   const rand = seeded(spec.seed)
   const geo = new T.SphereGeometry(1, spec.segments[0], spec.segments[1])
   const pos = geo.attributes.position
@@ -139,20 +156,23 @@ function buildAsteroidPrototype(spec: AsteroidPrototypeSpec): T.BufferGeometry {
 }
 
 /**
- * GPU-driven instanced material for realistic 3D belt asteroids & Kuiper icy bodies.
- * Each instance orbits smoothly around the Sun and tumbles on its own spin axis in the vertex shader
- * with zero per-frame CPU matrix updates, while retaining full PointLight + normalMap + regolith shading.
+ * GPU-driven instanced material for realistic 3D belt asteroids, Trojans, Centaurs, KBOs & Scattered Disc bodies.
+ * Each instance orbits smoothly prograde (counter-clockwise from north ecliptic pole) and tumbles
+ * on its own spin axis with zero per-frame CPU matrix updates.
  */
 function createBeltRockMaterial(
   map: T.Texture | null,
   normalMap: T.Texture | null,
   clockUniform: { value: number },
+  angleOffsetUniform: { value: number },
   icy: boolean,
+  cacheKey: string,
 ) {
   const material = new T.MeshPhongMaterial({
     color: 0xffffff,
     map,
     normalMap,
+    vertexColors: true,
     specular: icy ? 0x2a3a4a : 0x0d0b0a,
     shininess: icy ? 24 : 9,
   })
@@ -165,12 +185,14 @@ function createBeltRockMaterial(
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uBeltClock = clockUniform
+    shader.uniforms.uAngleOffset = angleOffsetUniform
     shader.vertexShader =
       `
       attribute vec4 aOrbit;
       attribute vec4 aSpin;
       attribute vec4 aScaleTilt;
       uniform float uBeltClock;
+      uniform float uAngleOffset;
       ` +
       shader.vertexShader
         .replace(
@@ -189,11 +211,11 @@ function createBeltRockMaterial(
           '#include <begin_vertex>',
           `
           #include <begin_vertex>
-          float _bOrbAng = aOrbit.z + uBeltClock * aOrbit.w;
+          float _bOrbAng = aOrbit.z + uBeltClock * aOrbit.w + uAngleOffset;
           vec3 _bCenter = vec3(
             cos(_bOrbAng) * aOrbit.x,
             sin(_bOrbAng + aScaleTilt.w) * aOrbit.y,
-            sin(_bOrbAng) * aOrbit.x
+            -sin(_bOrbAng) * aOrbit.x
           );
           vec3 _bScaled = transformed * aScaleTilt.xyz;
           transformed = _bScaled * _bCs + cross(_bAx, _bScaled) * _bSn + _bAx * dot(_bAx, _bScaled) * (1.0 - _bCs) + _bCenter;
@@ -221,17 +243,17 @@ function createBeltRockMaterial(
       `,
     )
   }
-  material.customProgramCacheKey = () => (icy ? 'kuiper-rock-instanced-v1' : 'belt-rock-instanced-v1')
+  material.customProgramCacheKey = () => cacheKey
   return material
 }
 
 /**
  * Soft, circular, distance-attenuated distant dust micro-grains that fade smoothly
- * when the camera flies in close (so close-up views only show crisp 3D sculpted rocks,
- * never flat square pixels!).
+ * when the camera flies in close (so close-up views only show crisp 3D sculpted rocks).
  */
 function createBeltDustMaterial(
   clockUniform: { value: number },
+  angleOffsetUniform: { value: number },
   baseSize: number,
   opacity: number,
   fadeNear: number,
@@ -244,6 +266,7 @@ function createBeltDustMaterial(
     blending: additive ? T.AdditiveBlending : T.NormalBlending,
     uniforms: {
       uBeltClock: clockUniform,
+      uAngleOffset: angleOffsetUniform,
       uSize: { value: baseSize },
       uOpacity: { value: opacity },
       uFadeNear: { value: fadeNear },
@@ -255,24 +278,24 @@ function createBeltDustMaterial(
       attribute float aIncPhase;
       attribute float aSizeMul;
       uniform float uBeltClock;
+      uniform float uAngleOffset;
       uniform float uSize;
       uniform float uFadeNear;
       uniform float uFadeFar;
       varying vec3 vColor;
       varying float vAlpha;
       void main() {
-        float ang = aOrbit.z + uBeltClock * aOrbit.w;
+        float ang = aOrbit.z + uBeltClock * aOrbit.w + uAngleOffset;
         vec3 worldPos = vec3(
           cos(ang) * aOrbit.x,
           sin(ang + aIncPhase) * aOrbit.y,
-          sin(ang) * aOrbit.x
+          -sin(ang) * aOrbit.x
         );
         vec4 mvPosition = modelViewMatrix * vec4(worldPos, 1.0);
         float dist = max(0.01, -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
-        // Soft distance fade: micro-dust gracefully vanishes up close where 3D rocks take over
         float closeFade = smoothstep(uFadeNear, uFadeFar, dist);
-        float ptSize = clamp(uSize * aSizeMul * (320.0 / dist), 1.45, 5.2);
+        float ptSize = clamp(uSize * aSizeMul * (320.0 / dist), 1.35, 5.2);
         gl_PointSize = ptSize;
         vColor = color;
         vAlpha = closeFade;
@@ -286,7 +309,6 @@ function createBeltDustMaterial(
         vec2 p = gl_PointCoord * 2.0 - 1.0;
         float r2 = dot(p, p);
         if (r2 >= 1.0) discard;
-        // Smooth circular soft grain (never a square pixel)
         float soft = exp(-2.6 * r2) * (1.0 - smoothstep(0.52, 1.0, r2));
         float alpha = soft * uOpacity * vAlpha;
         if (alpha < 0.004) discard;
@@ -296,147 +318,101 @@ function createBeltDustMaterial(
   })
 }
 
-function buildBeltField(options: {
+interface SampledParticle {
+  r: number
+  phase0: number
+  omega: number
+  yAmp: number
+  incPhase: number
+  rgb: [number, number, number]
+  dustRgb: [number, number, number]
+  sizeMul: number
+}
+
+function buildCustomBeltField(options: {
   seed: number
-  band: BandRange
-  icy: boolean
   rockCounts: [number, number, number]
   dustCount: number
-  prototypes: [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry]
+  prototypes: [T.SphereGeometry, T.SphereGeometry, T.SphereGeometry]
   rockMaterial: T.Material
   clockUniform: { value: number }
+  angleOffsetUniform: { value: number }
+  baseSize: number
+  dustOpacity: number
+  fadeNear: number
+  fadeFar: number
+  additiveDust: boolean
+  rockSizeRange: [number, number]
   webgl: boolean
+  sample: (rand: () => number) => SampledParticle
 }) {
-  const { seed, band, icy, rockCounts, dustCount, prototypes, rockMaterial, clockUniform, webgl } =
-    options
+  const {
+    seed,
+    rockCounts,
+    dustCount,
+    prototypes,
+    rockMaterial,
+    clockUniform,
+    angleOffsetUniform,
+    baseSize,
+    dustOpacity,
+    fadeNear,
+    fadeFar,
+    additiveDust,
+    rockSizeRange,
+    webgl,
+    sample,
+  } = options
   const rand = seeded(seed)
   const group = new T.Group()
-  const identity = new T.Matrix4()
+  const batches: ReturnType<typeof createBeltInstances>[] = []
 
-  // Sample realistic orbital radius (with subtle Kirkwood gap resonances in main belt,
-  // or cold classical core + scattered outer halo in Kuiper Belt)
-  function sampleRadius(): { r: number; isHot: boolean } {
-    if (!icy) {
-      let t = (rand() + rand()) * 0.5
-      // Gentle Kirkwood resonance carving around 0.34 (3:1) and 0.62 (5:2)
-      if (Math.abs(t - 0.34) < 0.032 || Math.abs(t - 0.62) < 0.025) {
-        t = (rand() + rand()) * 0.5
-      }
-      return { r: band.inner + (band.outer - band.inner) * t, isHot: false }
-    }
-    const isHot = rand() < 0.32
-    const t = isHot ? Math.pow(rand(), 0.72) : (rand() + rand() + rand()) / 3
-    return { r: band.inner + (band.outer - band.inner) * t, isHot }
-  }
-
-  function sampleOrbitalOmega(r: number): number {
-    // Smooth Keplerian differential rotation: inner belt drifts noticeably faster than outer belt
-    const base = icy ? 0.0032 : 0.0155
-    const ref = icy ? band.inner : (band.inner + band.outer) * 0.5
-    return base * Math.pow(ref / Math.max(1, r), 1.35)
-  }
-
-  // 1. Real 3D sculpted instanced asteroid / KBO meshes (3 distinct rock prototypes)
   if (webgl) {
-    const colorTmp = new T.Color()
     for (let pIdx = 0; pIdx < 3; pIdx++) {
       const count = rockCounts[pIdx]
-      // Clone geometry so each InstancedMesh carries its own instanced attributes
-      const instGeo = prototypes[pIdx].clone()
-      const aOrbit = new Float32Array(count * 4)
-      const aSpin = new Float32Array(count * 4)
-      const aScaleTilt = new Float32Array(count * 4)
-
-      const mesh = new T.InstancedMesh(instGeo, rockMaterial, count)
-      mesh.frustumCulled = false
-
+      if (count <= 0) continue
+      const rocks = new Float32Array(count * rockStride)
       for (let i = 0; i < count; i++) {
-        const { r, isHot } = sampleRadius()
-        const phase0 = rand() * tau
-        const omega = sampleOrbitalOmega(r)
-        const ySpread = icy
-          ? (isHot ? 14.5 : 4.2) * (rand() + rand()) * 0.5
-          : (0.45 + 2.15 * rand() ** 1.4)
-        const incPhase = rand() * tau
-
-        // Random unit spin axis & gentle tumble rate
+        const s = sample(rand)
         const sz = rand() * 2 - 1
         const sa = rand() * tau
         const sr = Math.sqrt(Math.max(0, 1 - sz * sz))
         const spinSpeed = (0.12 + rand() * 0.52) * (rand() < 0.5 ? 1 : -1)
 
-        // Power-law size distribution: many small fragments, clearly visible mid-size rocks, and occasional boulders
-        const sizeT = rand() ** 2.45
-        const baseRad = icy
-          ? 0.095 + sizeT * 0.3
-          : 0.058 + sizeT * 0.21
+        const sizeT = rand() ** 2.4
+        const baseRad = (rockSizeRange[0] + sizeT * (rockSizeRange[1] - rockSizeRange[0])) * s.sizeMul
         const sx = baseRad * (0.86 + rand() * 0.42)
         const sy = baseRad * (0.68 + rand() * 0.36)
         const szScale = baseRad * (0.78 + rand() * 0.38)
 
-        const o4 = i * 4
-        aOrbit[o4] = r
-        aOrbit[o4 + 1] = ySpread
-        aOrbit[o4 + 2] = phase0
-        aOrbit[o4 + 3] = omega
-
-        aSpin[o4] = Math.cos(sa) * sr
-        aSpin[o4 + 1] = sz
-        aSpin[o4 + 2] = Math.sin(sa) * sr
-        aSpin[o4 + 3] = spinSpeed
-
-        aScaleTilt[o4] = sx
-        aScaleTilt[o4 + 1] = sy
-        aScaleTilt[o4 + 2] = szScale
-        aScaleTilt[o4 + 3] = incPhase
-
-        mesh.setMatrixAt(i, identity)
-
-        // Realistic spectral albedo variation (C/S/M-type for main belt; cold red tholin vs bright methane-ice for Kuiper)
-        if (!icy) {
-          const typeRoll = rand()
-          if (typeRoll < 0.48) {
-            // C-type dark carbonaceous asteroid
-            const v = 0.56 + rand() * 0.24
-            colorTmp.setRGB(v * 0.96, v * 0.92, v * 0.88)
-          } else if (typeRoll < 0.86) {
-            // S-type warm silicaceous / stony asteroid
-            const v = 0.72 + rand() * 0.28
-            colorTmp.setRGB(Math.min(1, v * 1.08), v * 0.96, v * 0.82)
-          } else {
-            // M-type slightly cooler metallic-silicate asteroid
-            const v = 0.76 + rand() * 0.24
-            colorTmp.setRGB(v * 0.96, v * 0.98, Math.min(1, v * 1.02))
-          }
-        } else {
-          const iceRoll = rand()
-          if (!isHot && iceRoll < 0.55) {
-            // Cold classical reddish tholin-coated KBO (Arrokoth-like)
-            const v = 0.7 + rand() * 0.28
-            colorTmp.setRGB(Math.min(1, v * 1.06), v * 0.84, v * 0.76)
-          } else if (iceRoll < 0.82) {
-            // Frosted blue-grey water-ice KBO
-            const v = 0.74 + rand() * 0.26
-            colorTmp.setRGB(v * 0.84, v * 0.94, Math.min(1, v * 1.08))
-          } else {
-            // Bright methane-frost KBO
-            const v = 0.86 + rand() * 0.14
-            colorTmp.setRGB(v * 0.94, v * 0.97, Math.min(1, v * 1.04))
-          }
-        }
-        mesh.setColorAt(i, colorTmp)
+        const offset = i * rockStride
+        rocks.set(
+          [
+            s.r,
+            s.yAmp,
+            s.phase0,
+            s.omega,
+            Math.cos(sa) * sr,
+            sz,
+            Math.sin(sa) * sr,
+            spinSpeed,
+            sx,
+            sy,
+            szScale,
+            s.incPhase,
+            s.rgb[0],
+            s.rgb[1],
+            s.rgb[2],
+          ],
+          offset,
+        )
       }
-
-      instGeo.setAttribute('aOrbit', new T.InstancedBufferAttribute(aOrbit, 4))
-      instGeo.setAttribute('aSpin', new T.InstancedBufferAttribute(aSpin, 4))
-      instGeo.setAttribute('aScaleTilt', new T.InstancedBufferAttribute(aScaleTilt, 4))
-      mesh.instanceMatrix.needsUpdate = true
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-      group.add(mesh)
+      const batch = createBeltInstances(prototypes[pIdx], rockMaterial, rocks)
+      batches.push(batch)
+      group.add(batch.full, batch.distant)
     }
   }
 
-  // 2. Soft circular distant micro-dust (fades away up close; also provides Canvas 2D & raypick coordinates)
   const dustPos = new Float32Array(dustCount * 3)
   const dustCol = new Float32Array(dustCount * 3)
   const dustOrbit = new Float32Array(dustCount * 4)
@@ -444,39 +420,23 @@ function buildBeltField(options: {
   const dustSizeMul = new Float32Array(dustCount)
 
   for (let i = 0; i < dustCount; i++) {
-    const { r, isHot } = sampleRadius()
-    const phase0 = rand() * tau
-    const omega = sampleOrbitalOmega(r)
-    const yAmp = icy
-      ? (isHot ? 14.0 : 4.2) * (rand() + rand()) * 0.5
-      : (0.4 + 2.0 * rand() ** 1.35)
-    const incPhase = rand() * tau
-    const y0 = Math.sin(phase0 + incPhase) * yAmp
-
+    const s = sample(rand)
     const i3 = i * 3
-    dustPos[i3] = Math.cos(phase0) * r
-    dustPos[i3 + 1] = y0
-    dustPos[i3 + 2] = Math.sin(phase0) * r
+    dustPos[i3] = Math.cos(s.phase0) * s.r
+    dustPos[i3 + 1] = Math.sin(s.phase0 + s.incPhase) * s.yAmp
+    dustPos[i3 + 2] = -Math.sin(s.phase0) * s.r
 
-    const shade = icy ? 0.28 + 0.62 * rand() ** 1.8 : 0.36 + 0.58 * rand()
-    if (icy) {
-      const warm = !isHot && rand() < 0.35
-      dustCol[i3] = shade * (warm ? 0.88 : 0.68)
-      dustCol[i3 + 1] = shade * (warm ? 0.78 : 0.85)
-      dustCol[i3 + 2] = shade * (warm ? 0.74 : 1.0)
-    } else {
-      dustCol[i3] = shade * 0.98
-      dustCol[i3 + 1] = shade * 0.84
-      dustCol[i3 + 2] = shade * 0.68
-    }
+    dustCol[i3] = s.dustRgb[0]
+    dustCol[i3 + 1] = s.dustRgb[1]
+    dustCol[i3 + 2] = s.dustRgb[2]
 
     const i4 = i * 4
-    dustOrbit[i4] = r
-    dustOrbit[i4 + 1] = yAmp
-    dustOrbit[i4 + 2] = phase0
-    dustOrbit[i4 + 3] = omega
-    dustIncPhase[i] = incPhase
-    dustSizeMul[i] = 0.65 + rand() * 0.9
+    dustOrbit[i4] = s.r
+    dustOrbit[i4 + 1] = s.yAmp
+    dustOrbit[i4 + 2] = s.phase0
+    dustOrbit[i4 + 3] = s.omega
+    dustIncPhase[i] = s.incPhase
+    dustSizeMul[i] = (0.65 + rand() * 0.9) * s.sizeMul
   }
 
   const dustGeo = new T.BufferGeometry()
@@ -489,17 +449,18 @@ function buildBeltField(options: {
   const dustMat = webgl
     ? createBeltDustMaterial(
         clockUniform,
-        icy ? 1.55 : 1.35,
-        icy ? 0.54 : 0.48,
-        icy ? 16 : 9,
-        icy ? 46 : 26,
-        icy,
+        angleOffsetUniform,
+        baseSize,
+        dustOpacity,
+        fadeNear,
+        fadeFar,
+        additiveDust,
       )
     : new T.PointsMaterial({
-        size: icy ? 0.24 : 0.16,
+        size: baseSize * 0.14,
         vertexColors: true,
         transparent: true,
-        opacity: 0.5,
+        opacity: dustOpacity,
         depthWrite: false,
       })
 
@@ -507,20 +468,102 @@ function buildBeltField(options: {
   dustPoints.frustumCulled = false
   group.add(dustPoints)
 
-  return { group, dustPoints }
+  return { group, dustPoints, batches }
+}
+
+/**
+ * Serene, gossamer 3D Inner Oort / Hills Cloud halo surrounding Sedna & 2012 VP113.
+ * Transitions smoothly from a flared inner Hills disc (445..580) to a sparse 3D spherical comet shell (560..710).
+ */
+function buildOortHalo(
+  band: BandRange,
+  clockUniform: { value: number },
+  webgl: boolean,
+) {
+  const rand = seeded(903771)
+  const count = 2600
+  const pos = new Float32Array(count * 3)
+  const col = new Float32Array(count * 3)
+  const orb = new Float32Array(count * 4)
+  const incPhase = new Float32Array(count)
+  const sizeMul = new Float32Array(count)
+
+  for (let i = 0; i < count; i++) {
+    const isOuterShell = rand() < 0.44
+    const t = isOuterShell ? 0.35 + rand() * 0.95 : Math.pow(rand(), 0.78) * 0.85
+    const r = band.inner + (band.outer - band.inner) * t
+    const phase0 = rand() * tau
+    const omega = 0.00055 * Math.pow(band.inner / Math.max(1, r), 1.35)
+
+    // Smooth vertical thickening from flared Hills disc into a gentle 3D spherical Oort shell
+    const latSpread = isOuterShell
+      ? (rand() * 2 - 1) * r * 0.62
+      : (rand() + rand() - 1) * r * (0.16 + 0.24 * t)
+    const yAmp = Math.abs(latSpread)
+    const ip = rand() * tau
+
+    const i3 = i * 3
+    pos[i3] = Math.cos(phase0) * r
+    pos[i3 + 1] = Math.sin(phase0 + ip) * yAmp
+    pos[i3 + 2] = -Math.sin(phase0) * r
+
+    // Fade outer edge smoothly so the halo dissolves organically into deep space
+    const radialFade = Math.sin(Math.min(1, t / 1.3) * Math.PI * 0.9 + 0.1)
+    const shade = (0.26 + 0.56 * rand() ** 1.6) * (0.55 + 0.45 * radialFade)
+    const cool = rand() < 0.74
+    col[i3] = shade * (cool ? 0.64 : 0.86)
+    col[i3 + 1] = shade * (cool ? 0.78 : 0.74)
+    col[i3 + 2] = shade * (cool ? 1.0 : 0.82)
+
+    const i4 = i * 4
+    orb[i4] = r
+    orb[i4 + 1] = yAmp
+    orb[i4 + 2] = phase0
+    orb[i4 + 3] = omega
+    incPhase[i] = ip
+    sizeMul[i] = 0.6 + rand() * 1.1
+  }
+
+  const geo = new T.BufferGeometry()
+  geo.setAttribute('position', new T.BufferAttribute(pos, 3))
+  geo.setAttribute('color', new T.BufferAttribute(col, 3))
+  geo.setAttribute('aOrbit', new T.BufferAttribute(orb, 4))
+  geo.setAttribute('aIncPhase', new T.BufferAttribute(incPhase, 1))
+  geo.setAttribute('aSizeMul', new T.BufferAttribute(sizeMul, 1))
+
+  const zeroOffset = { value: 0 }
+  const mat = webgl
+    ? createBeltDustMaterial(clockUniform, zeroOffset, 1.75, 0.34, 48, 125, true)
+    : new T.PointsMaterial({
+        size: 0.22,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+      })
+
+  const points = new T.Points(geo, mat)
+  points.frustumCulled = false
+  const group = new T.Group()
+  group.add(points)
+  return { group, dustPoints: points }
 }
 
 export function createAsteroidBelts(
   scene: T.Scene,
   webgl: boolean,
-  mainBand: BandRange,
-  outerBand: BandRange,
+  layout: BeltLayout,
   fallbackRockTex: T.Texture | null,
 ) {
+  const { mainBand, hildaBand, centaurBands, outerBand, scatteredBand, oortBand, jupiterA, neptuneA } =
+    layout
   const clockUniform = { value: 0 }
+  const zeroAngle = { value: 0 }
+  const jupiterAngle = { value: 0 }
+  const neptuneAngle = { value: 0 }
 
   // 3 distinct sculpted 3D meteorite archetypes (angular fragment, cratered boulder, bilobed contact binary)
-  const prototypes: [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] = [
+  const prototypes: [T.SphereGeometry, T.SphereGeometry, T.SphereGeometry] = [
     buildAsteroidPrototype({
       seed: 8101,
       scaleXYZ: [1.14, 0.84, 0.96],
@@ -550,7 +593,6 @@ export function createAsteroidBelts(
     }),
   ]
 
-  // Procedural high-contrast rocky & frosted-icy textures + normal maps shared by belt meshes
   let rockyMaps: SynthesizedMaps | null = null
   let icyMaps: SynthesizedMaps | null = null
   if (webgl) {
@@ -588,51 +630,477 @@ export function createAsteroidBelts(
     rockyMaps?.albedo ?? fallbackRockTex,
     rockyMaps?.normal ?? null,
     clockUniform,
+    zeroAngle,
     false,
+    'belt-rock-instanced-v2',
+  )
+  const jupLockedRockMat = createBeltRockMaterial(
+    rockyMaps?.albedo ?? fallbackRockTex,
+    rockyMaps?.normal ?? null,
+    clockUniform,
+    jupiterAngle,
+    false,
+    'belt-rock-juplocked-v2',
   )
   const kuiperRockMat = createBeltRockMaterial(
     icyMaps?.albedo ?? fallbackRockTex,
     icyMaps?.normal ?? null,
     clockUniform,
+    zeroAngle,
     true,
+    'kuiper-rock-instanced-v2',
+  )
+  const nepLockedRockMat = createBeltRockMaterial(
+    icyMaps?.albedo ?? fallbackRockTex,
+    icyMaps?.normal ?? null,
+    clockUniform,
+    neptuneAngle,
+    true,
+    'kuiper-rock-neplocked-v2',
   )
 
-  const main = buildBeltField({
+  const mainMid = (mainBand.inner + mainBand.outer) * 0.5
+
+  // 1. Main Asteroid Belt (Mars ↔ Jupiter, 2.1–3.3 AU) with Kirkwood resonance gaps (3:1, 5:2, 7:3, 2:1)
+  const main = buildCustomBeltField({
     seed: 18474,
-    band: mainBand,
-    icy: false,
-    rockCounts: [860, 880, 660], // 2,400 real 3D orbiting & tumbling asteroids!
+    rockCounts: [860, 880, 660],
     dustCount: 1650,
     prototypes,
     rockMaterial: mainRockMat,
     clockUniform,
+    angleOffsetUniform: zeroAngle,
+    baseSize: 1.35,
+    dustOpacity: 0.48,
+    fadeNear: 9,
+    fadeFar: 26,
+    additiveDust: false,
+    rockSizeRange: [0.058, 0.27],
     webgl,
+    sample: (rand) => {
+      let t = (rand() + rand()) * 0.5
+      // Authentic Kirkwood gaps: 3:1 (~0.32), 5:2 (~0.56), 7:3 (~0.71), 2:1 (~0.92)
+      if (
+        Math.abs(t - 0.32) < 0.03 ||
+        Math.abs(t - 0.56) < 0.026 ||
+        Math.abs(t - 0.71) < 0.02 ||
+        t > 0.91
+      ) {
+        t = (rand() + rand()) * 0.5
+      }
+      const r = mainBand.inner + (mainBand.outer - mainBand.inner) * t
+      const phase0 = rand() * tau
+      const omega = 0.0155 * Math.pow(mainMid / Math.max(1, r), 1.35)
+      const yAmp = 0.45 + 2.2 * rand() ** 1.4
+      const incPhase = rand() * tau
+      const typeRoll = rand()
+      let rgb: [number, number, number]
+      if (typeRoll < 0.48) {
+        const v = 0.56 + rand() * 0.24
+        rgb = [v * 0.96, v * 0.92, v * 0.88]
+      } else if (typeRoll < 0.86) {
+        const v = 0.72 + rand() * 0.28
+        rgb = [Math.min(1, v * 1.08), v * 0.96, v * 0.82]
+      } else {
+        const v = 0.76 + rand() * 0.24
+        rgb = [v * 0.96, v * 0.98, Math.min(1, v * 1.02)]
+      }
+      const shade = 0.36 + 0.58 * rand()
+      return {
+        r,
+        phase0,
+        omega,
+        yAmp,
+        incPhase,
+        rgb,
+        dustRgb: [shade * 0.98, shade * 0.84, shade * 0.68],
+        sizeMul: 1,
+      }
+    },
   })
 
-  const outer = buildBeltField({
-    seed: 429517,
-    band: outerBand,
-    icy: true,
-    rockCounts: [840, 920, 1040], // 2,800 real 3D icy Kuiper Belt objects (rich in bilobed KBOs!)
-    dustCount: 2400,
+  // 2. Hilda Group (3:2 orbital resonance triangle rotating in lockstep with Jupiter!)
+  const hildaMid = (hildaBand.inner + hildaBand.outer) * 0.5
+  const hildaHalf = (hildaBand.outer - hildaBand.inner) * 0.46
+  const hilda = buildCustomBeltField({
+    seed: 15382,
+    rockCounts: [180, 170, 130],
+    dustCount: 440,
+    prototypes,
+    rockMaterial: jupLockedRockMat,
+    clockUniform,
+    angleOffsetUniform: jupiterAngle,
+    baseSize: 1.25,
+    dustOpacity: 0.42,
+    fadeNear: 10,
+    fadeFar: 28,
+    additiveDust: false,
+    rockSizeRange: [0.056, 0.23],
+    webgl,
+    sample: (rand) => {
+      // Sample around the 3 resonant aphelion corners (L4 +60°, L3 180°, L5 -60°)
+      let rel = rand() * tau
+      // Slight Keplerian dwell concentration near the 3 triangle vertices
+      const cornerBias = 0.5 - 0.5 * Math.cos(3 * rel)
+      if (rand() > 0.42 + 0.58 * cornerBias) {
+        const vertex = ([Math.PI / 3, Math.PI, (5 * Math.PI) / 3])[Math.floor(rand() * 3)]
+        rel = vertex + (rand() + rand() - 1) * 0.55
+      }
+      // Real 3:2 resonant triangular envelope: farthest outward at L4/L3/L5, closest inward toward Jupiter (rel=0)
+      const tri = -Math.cos(3 * rel)
+      const r = hildaMid + hildaHalf * (tri * 0.72 + (rand() - 0.5) * 0.52)
+      const yAmp = 0.6 + 3.2 * rand() ** 1.3
+      const v = 0.48 + rand() * 0.24
+      const rgb: [number, number, number] = [Math.min(1, v * 1.12), v * 0.88, v * 0.74]
+      const shade = 0.34 + 0.48 * rand()
+      return {
+        r,
+        phase0: rel,
+        omega: 0,
+        yAmp,
+        incPhase: rand() * tau,
+        rgb,
+        dustRgb: [shade * 0.94, shade * 0.76, shade * 0.6],
+        sizeMul: 0.92,
+      }
+    },
+  })
+
+  // 3. Jupiter Trojans (L4 Greek Camp +60° & L5 Trojan Camp -60°, co-orbiting Jupiter!)
+  const trojans = buildCustomBeltField({
+    seed: 617354,
+    rockCounts: [260, 260, 220],
+    dustCount: 820,
+    prototypes,
+    rockMaterial: jupLockedRockMat,
+    clockUniform,
+    angleOffsetUniform: jupiterAngle,
+    baseSize: 1.4,
+    dustOpacity: 0.46,
+    fadeNear: 12,
+    fadeFar: 34,
+    additiveDust: false,
+    rockSizeRange: [0.068, 0.28],
+    webgl,
+    sample: (rand) => {
+      // L4 Greek camp (+60°) is slightly more populous than L5 Trojan camp (-60°), matching observations!
+      const camp = rand() < 0.56 ? Math.PI / 3 : -Math.PI / 3
+      // Authentic elongated tadpole libration cloud around ±60°
+      const dTheta = (rand() + rand() + rand() - 1.5) * 0.46
+      const phase0 = camp + dTheta
+      const radialSpread = (rand() + rand() - 1) * 7.8 * (1 - Math.min(0.55, Math.abs(dTheta) * 0.9))
+      const r = jupiterA + radialSpread
+      const yAmp = (1.2 + 9.4 * rand() ** 1.25) * (1 - Math.min(0.4, Math.abs(dTheta) * 0.5))
+      // D-type dark reddish-brown & P/C-type neutral carbonaceous Trojans
+      const isD = rand() < 0.68
+      const v = 0.44 + rand() * 0.26
+      const rgb: [number, number, number] = isD
+        ? [Math.min(1, v * 1.16), v * 0.86, v * 0.72]
+        : [v * 0.92, v * 0.9, v * 0.88]
+      const shade = 0.34 + 0.52 * rand()
+      return {
+        r,
+        phase0,
+        omega: 0,
+        yAmp,
+        incPhase: rand() * tau,
+        rgb,
+        dustRgb: [shade * 0.92, shade * 0.76, shade * 0.58],
+        sizeMul: 1,
+      }
+    },
+  })
+
+  // 4. Centaur Belt (Between Jupiter, Saturn, Uranus & Neptune — bimodal grey vs ultra-red icy-rocky bodies!)
+  const centaurs = buildCustomBeltField({
+    seed: 101992,
+    rockCounts: [320, 340, 300],
+    dustCount: 1150,
     prototypes,
     rockMaterial: kuiperRockMat,
     clockUniform,
+    angleOffsetUniform: zeroAngle,
+    baseSize: 1.45,
+    dustOpacity: 0.42,
+    fadeNear: 15,
+    fadeFar: 44,
+    additiveDust: true,
+    rockSizeRange: [0.082, 0.32],
     webgl,
+    sample: (rand) => {
+      // Weighted into the real inter-giant corridors: Saturn–Uranus (52%), Uranus–Neptune (36%), Jupiter–Saturn (12%)
+      const zoneRoll = rand()
+      let band: BandRange
+      if (zoneRoll < 0.12) band = centaurBands.jupSat
+      else if (zoneRoll < 0.64) band = centaurBands.satUra
+      else band = centaurBands.uraNep
+      const t = (rand() + rand()) * 0.5
+      const r = band.inner + (band.outer - band.inner) * t
+      const phase0 = rand() * tau
+      const omega = 0.0068 * Math.pow(centaurBands.satUra.inner / Math.max(1, r), 1.35)
+      // Real Centaurs have excited inclinations (5°–25°) arcing above/below the giant planets
+      const yAmp = (2.8 + 18.5 * rand() ** 1.3) * (r / centaurBands.satUra.inner)
+      // Bimodal Centaur color taxonomy discovered by photometry: grey-slate vs red organic tholin
+      const isUltraRed = rand() < 0.46
+      const v = 0.58 + rand() * 0.28
+      const rgb: [number, number, number] = isUltraRed
+        ? [Math.min(1, v * 1.18), v * 0.76, v * 0.66]
+        : [v * 0.84, v * 0.92, Math.min(1, v * 1.04)]
+      const shade = 0.3 + 0.52 * rand() ** 1.4
+      return {
+        r,
+        phase0,
+        omega,
+        yAmp,
+        incPhase: rand() * tau,
+        rgb,
+        dustRgb: isUltraRed
+          ? [shade * 0.92, shade * 0.66, shade * 0.56]
+          : [shade * 0.64, shade * 0.88, shade * 0.94],
+        sizeMul: 1,
+      }
+    },
   })
 
-  scene.add(main.group, outer.group)
+  // 4b. Neptune Trojans (L4 +60° & L5 -60° along Neptune's orbit!)
+  const neptuneTrojans = buildCustomBeltField({
+    seed: 300720,
+    rockCounts: [90, 90, 80],
+    dustCount: 340,
+    prototypes,
+    rockMaterial: nepLockedRockMat,
+    clockUniform,
+    angleOffsetUniform: neptuneAngle,
+    baseSize: 1.45,
+    dustOpacity: 0.38,
+    fadeNear: 16,
+    fadeFar: 46,
+    additiveDust: true,
+    rockSizeRange: [0.09, 0.33],
+    webgl,
+    sample: (rand) => {
+      const camp = rand() < 0.65 ? Math.PI / 3 : -Math.PI / 3
+      const dTheta = (rand() + rand() + rand() - 1.5) * 0.38
+      const r = neptuneA + (rand() + rand() - 1) * 5.8
+      const yAmp = 2.4 + 14.0 * rand() ** 1.3
+      const v = 0.68 + rand() * 0.26
+      const shade = 0.32 + 0.5 * rand() ** 1.5
+      return {
+        r,
+        phase0: camp + dTheta,
+        omega: 0,
+        yAmp,
+        incPhase: rand() * tau,
+        rgb: [v * 0.84, v * 0.92, Math.min(1, v * 1.06)],
+        dustRgb: [shade * 0.68, shade * 0.86, shade * 1.0],
+        sizeMul: 0.96,
+      }
+    },
+  })
 
-  // Base prototype geometries were cloned per InstancedMesh; dispose originals right away
+  // 5. Kuiper Belt (30–50 AU beyond Neptune — Cold Classical core, Plutino 3:2 band, Hot Classical halo)
+  const outer = buildCustomBeltField({
+    seed: 429517,
+    rockCounts: [840, 920, 1040],
+    dustCount: 2500,
+    prototypes,
+    rockMaterial: kuiperRockMat,
+    clockUniform,
+    angleOffsetUniform: zeroAngle,
+    baseSize: 1.55,
+    dustOpacity: 0.52,
+    fadeNear: 16,
+    fadeFar: 48,
+    additiveDust: true,
+    rockSizeRange: [0.095, 0.4],
+    webgl,
+    sample: (rand) => {
+      const isHot = rand() < 0.34
+      // Cold classical kernel peaks around 42–47 AU (t ≈ 0.6..0.85); Plutinos peak near 39.5 AU (t ≈ 0.47)
+      const t = isHot
+        ? Math.pow(rand(), 0.74)
+        : rand() < 0.3
+          ? 0.47 + (rand() + rand() - 1) * 0.14
+          : 0.66 + (rand() + rand() - 1) * 0.24
+      const clampedT = Math.max(0.02, Math.min(0.99, t))
+      const r = outerBand.inner + (outerBand.outer - outerBand.inner) * clampedT
+      const phase0 = rand() * tau
+      const omega = 0.003 * Math.pow(outerBand.inner / Math.max(1, r), 1.35)
+      const yAmp = (isHot ? 17.0 : 4.6) * (rand() + rand()) * 0.5
+      const iceRoll = rand()
+      let rgb: [number, number, number]
+      let warmDust = false
+      if (!isHot && iceRoll < 0.58) {
+        const v = 0.7 + rand() * 0.28
+        rgb = [Math.min(1, v * 1.08), v * 0.82, v * 0.74]
+        warmDust = true
+      } else if (iceRoll < 0.84) {
+        const v = 0.74 + rand() * 0.26
+        rgb = [v * 0.84, v * 0.94, Math.min(1, v * 1.08)]
+      } else {
+        const v = 0.86 + rand() * 0.14
+        rgb = [v * 0.94, v * 0.97, Math.min(1, v * 1.04)]
+      }
+      const shade = 0.28 + 0.62 * rand() ** 1.75
+      return {
+        r,
+        phase0,
+        omega,
+        yAmp,
+        incPhase: rand() * tau,
+        rgb,
+        dustRgb: warmDust
+          ? [shade * 0.9, shade * 0.76, shade * 0.72]
+          : [shade * 0.68, shade * 0.86, shade * 1.0],
+        sizeMul: 1,
+      }
+    },
+  })
+
+  // 6. Scattered Disc (50–120+ AU — dynamically excited high-inclination icy bodies around Gonggong, Eris & Farfarout!)
+  const scattered = buildCustomBeltField({
+    seed: 225088,
+    rockCounts: [480, 520, 500],
+    dustCount: 2100,
+    prototypes,
+    rockMaterial: kuiperRockMat,
+    clockUniform,
+    angleOffsetUniform: zeroAngle,
+    baseSize: 1.65,
+    dustOpacity: 0.44,
+    fadeNear: 22,
+    fadeFar: 64,
+    additiveDust: true,
+    rockSizeRange: [0.12, 0.48],
+    webgl,
+    sample: (rand) => {
+      const t = Math.pow(rand(), 1.15)
+      const r = scatteredBand.inner + (scatteredBand.outer - scatteredBand.inner) * t
+      const phase0 = rand() * tau
+      const omega = 0.0017 * Math.pow(scatteredBand.inner / Math.max(1, r), 1.35)
+      // High inclinations (15°–42°) characteristic of Neptune-scattered bodies
+      const yAmp = (14.0 + 62.0 * rand() ** 1.2) * (0.55 + 0.65 * t)
+      const roll = rand()
+      let rgb: [number, number, number]
+      let dustRgb: [number, number, number]
+      const shade = 0.26 + 0.58 * rand() ** 1.7
+      if (roll < 0.36) {
+        // Deep reddish Gonggong/Sedna-like tholin scattered bodies
+        const v = 0.68 + rand() * 0.28
+        rgb = [Math.min(1, v * 1.12), v * 0.72, v * 0.68]
+        dustRgb = [shade * 0.88, shade * 0.68, shade * 0.78]
+      } else if (roll < 0.76) {
+        // Cold blue-lavender frosted scattered icy bodies
+        const v = 0.74 + rand() * 0.24
+        rgb = [v * 0.82, v * 0.88, Math.min(1, v * 1.08)]
+        dustRgb = [shade * 0.68, shade * 0.78, shade * 1.0]
+      } else {
+        // Eris-like bright methane-frost icy bodies
+        const v = 0.86 + rand() * 0.14
+        rgb = [v * 0.94, v * 0.96, Math.min(1, v * 1.04)]
+        dustRgb = [shade * 0.82, shade * 0.88, shade * 1.0]
+      }
+      return {
+        r,
+        phase0,
+        omega,
+        yAmp,
+        incPhase: rand() * tau,
+        rgb,
+        dustRgb,
+        sizeMul: 1,
+      }
+    },
+  })
+
+  // 7. Inner Oort / Hills Cloud Halo (120–1000+ AU compressed, embracing 2012 VP113 & Sedna!)
+  const oort = buildOortHalo(oortBand, clockUniform, webgl)
+
+  scene.add(
+    main.group,
+    hilda.group,
+    trojans.group,
+    centaurs.group,
+    neptuneTrojans.group,
+    outer.group,
+    scattered.group,
+    oort.group,
+  )
+
   for (const proto of prototypes) proto.dispose()
+
+  const freeBatches = [...main.batches, ...centaurs.batches, ...outer.batches, ...scattered.batches]
+  const jupBatches = [...hilda.batches, ...trojans.batches]
+  const nepBatches = [...neptuneTrojans.batches]
+  const allGroups = [
+    main.group,
+    hilda.group,
+    trojans.group,
+    centaurs.group,
+    neptuneTrojans.group,
+    outer.group,
+    scattered.group,
+    oort.group,
+  ]
+
+  const frustum = new T.Frustum()
+  const clip = new T.Matrix4()
 
   return {
     belt: main.group,
     beltDust: main.dustPoints,
+    hilda: hilda.group,
+    hildaDust: hilda.dustPoints,
+    trojans: trojans.group,
+    trojanDust: trojans.dustPoints,
+    centaurs: centaurs.group,
+    centaurDust: centaurs.dustPoints,
+    neptuneTrojans: neptuneTrojans.group,
+    neptuneTrojanDust: neptuneTrojans.dustPoints,
     kuiper: outer.group,
     kuiperDust: outer.dustPoints,
-    stepBelts(clock: number) {
+    scattered: scattered.group,
+    scatteredDust: scattered.dustPoints,
+    oort: oort.group,
+    oortDust: oort.dustPoints,
+    setBeltsVisible(visible: boolean) {
+      for (const g of allGroups) g.visible = visible
+    },
+    updateBeltVisibility(camera: T.Camera, bufferHeight: number) {
+      if (!main.group.visible) return
+      frustum.setFromProjectionMatrix(
+        clip.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+      )
+      const focalPixels = bufferHeight * camera.projectionMatrix.elements[5] * 0.5
+      for (const batch of freeBatches)
+        batch.update(frustum, camera.matrixWorldInverse, focalPixels, clockUniform.value, 0)
+      for (const batch of jupBatches)
+        batch.update(
+          frustum,
+          camera.matrixWorldInverse,
+          focalPixels,
+          clockUniform.value,
+          jupiterAngle.value,
+        )
+      for (const batch of nepBatches)
+        batch.update(
+          frustum,
+          camera.matrixWorldInverse,
+          focalPixels,
+          clockUniform.value,
+          neptuneAngle.value,
+        )
+    },
+    stepBelts(clock: number, jupLon: number, nepLon: number) {
       clockUniform.value = clock
+      jupiterAngle.value = jupLon
+      neptuneAngle.value = nepLon
+      if (!webgl) {
+        // Synchronize co-orbiting dust orientation in Canvas 2D fallback mode
+        hilda.dustPoints.rotation.y = jupLon
+        trojans.dustPoints.rotation.y = jupLon
+        neptuneTrojans.dustPoints.rotation.y = nepLon
+      }
     },
     disposeBelts() {
       rockyMaps?.dispose()

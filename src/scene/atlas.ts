@@ -6,6 +6,7 @@ import { createSolarSystem } from '../data/solar'
 import { createPlanetDetail, type PlanetBody } from './planetDetail'
 import { createPlanetCanvas } from './planetCanvas'
 import { createSolarModels } from './solarModels'
+import { createTextureUploads } from './textureUploads'
 import { createLabels } from './labels'
 import { createArchive, jplFacts, moonSources } from '../data/archive'
 import { createDeepModels, galaxyForms, planetarySystems } from './deepModels'
@@ -40,9 +41,20 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   let disposed = false
   const listeners = new AbortController()
   const solarSystem = createSolarSystem()
-  const { planets, smallBodies, worlds, mainBand, outerBand, bandMid } = solarSystem
+  const {
+    planets,
+    smallBodies,
+    worlds,
+    mainBand,
+    hildaBand,
+    centaurBands,
+    outerBand,
+    scatteredBand,
+    oortBand,
+    bandMid,
+  } = solarSystem
   const scene = new T.Scene(),
-    camera = new T.PerspectiveCamera(45, 1, 0.012, 6000)
+    camera = new T.PerspectiveCamera(45, 1, 0.012, 9500)
   let renderer: T.WebGLRenderer | null = null
   try {
     renderer = new T.WebGLRenderer({
@@ -57,38 +69,78 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   const softwareContext = renderer ? null : canvas.getContext('2d')
   if (!renderer && !softwareContext) throw new Error('浏览器无法创建绘图上下文。')
   const ctx = softwareContext!
-  const textureLoader = new T.TextureLoader(),
-    textures: Record<string, T.Texture | null> = {}
+  const textures: Record<string, T.Texture | null> = {}
   const images: Record<string, HTMLImageElement> = {}
   for (const [id, url] of Object.entries(sources)) {
     if (!renderer) {
       textures[id] = null
       continue
     }
-    const texture = textureLoader.load(url, requestDraw)
+    const texture = new T.Texture()
     texture.colorSpace = id === 'Clouds' ? T.NoColorSpace : T.SRGBColorSpace
+    if (id === 'Sun') {
+      texture.wrapS = T.RepeatWrapping
+      texture.wrapT = T.ClampToEdgeWrapping
+    }
     textures[id] = texture
-  }
-  for (const [id, url] of Object.entries(thumbs)) {
+    if (id === 'Sky' || id === 'Galaxy') continue
     const image = new Image()
-    image.onload = () => requestDraw()
+    image.crossOrigin = 'anonymous'
+    const ready = () => {
+      if (disposed) return
+      texture.image = image
+      texture.needsUpdate = true
+      requestDraw()
+    }
+    image.onload = () => {
+      if (image.decode) image.decode().then(ready, ready)
+      else ready()
+    }
     image.src = url
-    images[id] = image
+  }
+  if (softwareContext) {
+    for (const [id, url] of Object.entries(thumbs)) {
+      const image = new Image()
+      image.onload = requestDraw
+      image.src = url
+      images[id] = image
+    }
   }
   if (renderer) {
     renderer.outputColorSpace = T.SRGBColorSpace
-    renderer.setClearColor(0x080d15)
+    const setBackground = () => renderer?.setClearColor(0x040710)
+    setBackground()
+    canvas.addEventListener(
+      'webglcontextrestored',
+      () => {
+        setBackground()
+        requestDraw()
+      },
+      { signal: listeners.signal },
+    )
   }
   const { tag, placeLabels, placeText, shownLabels, textPositions } = createLabels(tags)
   const {
     sun,
     sunGlow,
     stars,
+    parallaxStars,
+    shootingStars,
     belt,
     beltDust,
-    kuiper,
+    hildaDust,
+    trojanDust,
+    centaurDust,
+    neptuneTrojanDust,
     kuiperDust,
+    scatteredDust,
+    oortDust,
+    setBeltsVisible,
+    updateBeltVisibility,
     skyDome,
+    createCosmicSkyMaterial,
+    updateSpaceTime,
+    setSkyTexture,
     sphere,
     orbitLayer,
     orbitColors,
@@ -98,7 +150,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     syncMinorInstance,
     disposeSolarExtras,
   } = createSolarModels(scene, !!renderer, textures, solarSystem, tag, requestDraw)
-  const detail = createPlanetDetail(renderer, scene, requestDraw)
+  const loadTexture = renderer ? createTextureUploads(renderer) : null
+  const detail = createPlanetDetail(renderer, scene, requestDraw, loadTexture)
   const drawPlanet = softwareContext ? createPlanetCanvas() : null
   const bodyByWorld = new Map<World, PlanetBody>()
   const bodyByMoon = new Map<Moon, PlanetBody>()
@@ -218,8 +271,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   let orbitMode: OrbitMode = 'smart',
     showNames = true,
     dirty = true,
-    width = 1,
-    height = 1,
+    width = 0,
+    height = 0,
     pixelRatio = 1,
     fit = 180
   let yaw = 0.13,
@@ -256,7 +309,9 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function fullSystemDistance() {
     return (
-      outerBand.outer * Math.max(1.95, Math.sqrt(1 + 1 / (camera.aspect * 0.4142) ** 2) * 1.075)
+      scatteredBand.outer *
+      1.03 *
+      Math.max(1.85, Math.sqrt(1 + 1 / (camera.aspect * 0.4142) ** 2) * 1.04)
     )
   }
   function defaultDistance() {
@@ -270,7 +325,16 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       if (!p.moons.length) return p.r * 5.7 * narrow
       return p.extent * 2.85 * narrow
     }
-    if (focusRegion) return (focusRegion === 'main' ? 52 : 84) * narrow
+    if (focusRegion) {
+      const distByRegion: Record<Belt, number> = {
+        main: 64,
+        trojan: 72,
+        centaur: 88,
+        outer: 132,
+        scattered: 225,
+      }
+      return distByRegion[focusRegion] * narrow
+    }
     return fullSystemDistance()
   }
   function defaultAngles() {
@@ -284,9 +348,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (deepTarget) return deepLimits()
     if (galaxyView) return [88, Math.max(1100, defaultDistance() * 2)]
     const size = focusMoon ? focusMoon.r : focusPlanet ? focusPlanet.r : 0.12
-    return [Math.max(0.032, size * 1.55), Math.max(950, fullSystemDistance() * 4)]
+    return [Math.max(0.032, size * 1.55), Math.max(1800, fullSystemDistance() * 3.8)]
   }
+  let zoomTarget: number | null = null
+  let pendingZoomPoint: Point | null = null
+  const zoomAnchor = v3()
   function aim(animate = true, keepDirection = false) {
+    zoomTarget = null
     panOffset.set(0, 0, 0)
     const [newYaw, newPitch] = keepDirection ? [yaw, pitch] : defaultAngles()
     fit = defaultDistance()
@@ -330,6 +398,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     camera.updateMatrixWorld()
     skyDome.position.copy(camera.position)
     stars.position.copy(camera.position)
+    shootingStars.position.copy(camera.position)
   }
   function updateProjection() {
     const offset = deepTarget
@@ -341,18 +410,22 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function resize() {
     const box = stage.getBoundingClientRect()
-    width = Math.max(1, Math.round(box.width))
-    height = Math.max(1, Math.round(box.height))
+    const w = Math.max(1, Math.round(box.width))
+    const h = Math.max(1, Math.round(box.height))
+    const ratio = Math.min(devicePixelRatio || 1, 1.75)
+    if (w === width && h === height && ratio === pixelRatio) return
+    width = w
+    height = h
+    pixelRatio = ratio
     updateProjection()
-    pixelRatio = Math.min(devicePixelRatio || 1, 1.75)
     if (renderer) {
-      renderer.setPixelRatio(pixelRatio)
-      renderer.setSize(width, height, false)
+      renderer.setDrawingBufferSize(width, height, pixelRatio)
     } else {
       canvas.width = Math.round(width * pixelRatio)
       canvas.height = Math.round(height * pixelRatio)
     }
     const next = defaultDistance()
+    if (zoomTarget !== null) zoomTarget = clamp((zoomTarget * next) / fit, ...cameraLimits())
     zoom = clamp((zoom * next) / fit, ...cameraLimits())
     fit = next
     if (transition) aim(false)
@@ -393,12 +466,17 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       const preview = orbitMode === 'smart' && p === hoveredBody && p.anchor.visible
       let opacity = 0
       if (enabled) {
-        if (active || preview) opacity = 0.48
-        else if (all) opacity = p.region ? 0.17 : 0.31
+        if (active || preview) opacity = 0.52
+        else if (all) opacity = p.region ? 0.19 : 0.31
+        else if (focusRegion && p.region === focusRegion) opacity = 0.18
         else if (!p.region) opacity = detail ? 0.08 : 0.31
       }
       p.path.material.color.setHex(
-        active || preview ? orbitColors.focus : p.region ? orbitColors.small : orbitColors.planet,
+        active || preview
+          ? orbitColors.focus
+          : p.region
+            ? orbitColors[p.region]
+            : orbitColors.planet,
       )
       setOrbitOpacity(p.path, opacity, now)
       // All satellite loops for a host share a draw call. Build them on first use.
@@ -429,17 +507,21 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     highlightedMoon = moon
   }
   function smartHost() {
-    if (focusPlanet || focusRegion || galaxyView || zoom > fullSystemDistance() * 0.5) return null
+    if (focusPlanet || focusRegion || galaxyView || zoom > fullSystemDistance() * 0.6) return null
     let best = null,
       closest = Infinity
     for (const p of worlds) {
       if (!p.anchor.visible) continue
-      const offset = target.distanceToSquared(p.pos) / (p.r * p.r)
-      const limit = p === nearbyHost ? 6 : 4
+      const reach = p.region ? Math.max(p.extent * 1.4, 4.5) : Math.max(p.r, p.extent * 0.45)
+      const offset = target.distanceToSquared(p.pos) / (reach * reach)
+      const limit = p === nearbyHost ? 7.5 : 5
+      const maxCamDist = p.region
+        ? Math.max(p.r * 55, p.extent * 22, 48)
+        : Math.max(p.r * 28, p.extent * 14)
       if (
         offset < limit * limit &&
         offset < closest &&
-        camera.position.distanceToSquared(p.pos) < (p.r * 25) ** 2
+        camera.position.distanceToSquared(p.pos) < maxCamDist * maxCamDist
       ) {
         best = p
         closest = offset
@@ -448,15 +530,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     return best
   }
   function syncPaths() {
-    for (const p of worlds)
-      p.anchor.visible = !galaxyView && (!p.region || smallVisible || p === focusPlanet)
+    for (const p of worlds) p.anchor.visible = !galaxyView
     orbitLayer.visible = !galaxyView
     updateOrbitTargets()
-    belt.visible = !galaxyView
-    kuiper.visible = belt.visible
+    setBeltsVisible(!galaxyView)
     sun.mesh.visible = sunGlow.visible = !galaxyView
     galaxy.visible = galaxyView
     skyDome.visible = !galaxyView
+    parallaxStars.visible = !galaxyView
+    shootingStars.visible = !galaxyView && !orbitMotion.matches
     updateProjection()
     dirty = true
   }
@@ -472,7 +554,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     viewPos.copy(pos).applyMatrix4(camera.matrixWorldInverse)
     const depth = -viewPos.z
     if (depth < camera.near) return null
-    temp.copy(pos).project(camera)
+    temp.copy(viewPos).applyMatrix4(camera.projectionMatrix)
     return {
       x: ((temp.x + 1) * width) / 2,
       y: ((1 - temp.y) * height) / 2,
@@ -481,11 +563,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     }
   }
   const pickables: { obj: World | Moon; q: ScreenPoint; r: number }[] = []
+  const solarBodies = [sun, ...worlds]
   function visibleFromCamera(pos: T.Vector3) {
     const ray = toCenter.copy(pos).sub(camera.position),
       length = ray.length()
     ray.normalize()
-    for (const body of [sun, ...worlds]) {
+    for (const body of solarBodies) {
       if (body instanceof World && !body.anchor.visible) continue
       if (body.pos === pos) continue
       temp.copy(body.pos).sub(camera.position)
@@ -501,7 +584,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       placeLabels(showNames ? markers : [], width, height)
       return
     }
-    for (const object of [sun, ...worlds]) {
+    const minorMarkers: Label[] = []
+    for (const object of solarBodies) {
       if (object instanceof World && !object.anchor.visible) continue
       const q = project(object.pos)
       if (
@@ -515,6 +599,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         continue
       const r = q.scale * object.r
       if (object instanceof World) pickables.push({ obj: object, q, r })
+      if (
+        object instanceof World &&
+        object.region &&
+        !object.prominent &&
+        !smallVisible &&
+        focusRegion !== object.region &&
+        object !== focusPlanet
+      )
+        continue
       const mark = {
         el: object.tag,
         q,
@@ -522,8 +615,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         left: object.id === 'Mercury' || object.id === 'Mars',
       }
       if (object === focusPlanet) markers.unshift(mark)
+      else if (object instanceof World && object.region && (!object.prominent || object.region === 'main'))
+        minorMarkers.push(mark)
       else markers.push(mark)
     }
+    markers.push(...minorMarkers)
     for (const p of worlds) {
       if (!p.anchor.visible) continue
       for (const m of p.moons) {
@@ -606,7 +702,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   let galaxyStars: ReturnType<typeof particleField> | undefined
   const galaxyImage = new Image()
+  galaxyImage.crossOrigin = 'anonymous'
   galaxyImage.onload = () => {
+    if (textures.Galaxy) {
+      textures.Galaxy.image = galaxyImage
+      textures.Galaxy.needsUpdate = true
+    }
     const bitmap = document.createElement('canvas')
     bitmap.width = bitmap.height = 256
     const g = bitmap.getContext('2d')!
@@ -636,7 +737,6 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     galaxy.add(galaxyStars)
     requestDraw()
   }
-  galaxyImage.src = sources.Galaxy
   function updateGalaxyLayers() {
     const blend = Math.min(1, Math.abs(Math.sin(pitch)) / 0.24)
     for (const layer of galaxyLayers) layer.material.opacity = layer.weight * blend
@@ -652,6 +752,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     for (let i = 0; i < vertices.count; i += step) {
       world.fromBufferAttribute(vertices, i)
       if (galaxyView) world.applyQuaternion(galaxy.quaternion)
+      else if (field.rotation.y) world.applyAxisAngle(v3(0, 1, 0), field.rotation.y)
       const q = project(world)
       if (q && q.x >= 0 && q.x < width && q.y >= 0 && q.y < height)
         ctx.fillRect(q.x, q.y, size, size)
@@ -680,17 +781,47 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   solarMarker.setAttribute('aria-label', '太阳系在银河系中的位置，点击进入太阳系')
   pins.append(solarMarker)
   solarMarker.onclick = () => openPlanet(null)
-  const solarNotes = [
+  const regionLabels: Record<Belt, string> = {
+    main: '主小行星带',
+    trojan: '木星特洛伊群',
+    centaur: '半人马小天体带',
+    outer: '柯伊伯带',
+    scattered: '离散盘与内奥尔特云',
+  }
+  const solarNotes: (Note & { region: Belt })[] = [
+    {
+      name: '离散盘与内奥尔特云',
+      region: 'scattered',
+      p: v3(-0.62, 0, -0.78).normalize().multiplyScalar(bandMid(scatteredBand)),
+      body: '海王星 50 AU 之外是高倾角、大偏心率的离散盘，以及延伸至数百至上千 AU 的分离天体区与内奥尔特云。共工星、阋神星、远极星（约 132 AU）与深红矮行星赛德娜（远日点 937 AU）均分布于此。',
+      source: 'https://science.nasa.gov/solar-system/kuiper-belt/sedna/',
+    },
     {
       name: '柯伊伯带',
+      region: 'outer',
       p: v3(0.71, 0, -0.704).normalize().multiplyScalar(bandMid(outerBand)),
-      body: '海王星轨道外有一片由冰质小天体组成的宽阔圆盘。它的主要区域距太阳约 30 至 50 个天文单位，冥王星也在其中。图中淡蓝色颗粒表示这片区域的分布。',
+      body: '海王星轨道外约 30 至 50 AU 的冰质圆盘，包含新视野号飞掠的冥王星与雪人状双瓣天体阿罗科斯、反冥王星亡神星、高速自转带环的妊神星、洛希极限外带双环的创神星与鸟神星。',
       source: 'https://science.nasa.gov/solar-system/kuiper-belt/facts/',
     },
     {
-      name: '小行星带',
+      name: '半人马小天体带',
+      region: 'centaur',
+      p: v3(0.76, 0, 0.65).normalize().multiplyScalar(bandMid(centaurBands.satUra)),
+      body: '穿梭在木星、土星、天王星与海王星轨道之间的冰岩小天体群，颜色呈灰暗与极红双峰分布。其中土星与天王星之间的女凯龙星拥有致密双冰环，凯龙星兼具活跃彗发与环盘结构。',
+      source: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=10199',
+    },
+    {
+      name: '木星特洛伊群',
+      region: 'trojan',
+      p: smallBodies.find((b) => b.id === 'Eurybates')!.pos,
+      body: '分布于木星轨道前后 60° 拉格朗日点 L4（希腊营）与 L5（特洛伊营）的两大共轨小行星云团，随木星同步公转。NASA 露西号探测器正前往近距探测欧律巴忒斯与等大双星帕特罗克洛斯。',
+      source: 'https://science.nasa.gov/mission/lucy/',
+    },
+    {
+      name: '主小行星带与希尔达族',
+      region: 'main',
       p: v3(-0.79, 0, 0.61).normalize().multiplyScalar(bandMid(mainBand)),
-      body: '火星与木星轨道之间的暖色环带是主小行星带。这里散布着太阳系形成时留下的岩石和金属天体，谷神星是其中最大的成员。',
+      body: '火星与木星之间约 2.1 至 3.3 AU 的暖色环带保留着太阳系早期岩石与金属残余，受木星共振刻出柯克伍德空隙；外缘还分布着与木星呈 3:2 共振的三角形希尔达小行星族。',
       source: 'https://science.nasa.gov/solar-system/asteroids/facts/',
     },
   ]
@@ -728,7 +859,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         },
       ]
     if (galaxyView) return galaxyNotes
-    if (focusRegion) return [solarNotes[focusRegion === 'main' ? 1 : 0]]
+    if (focusRegion) {
+      const matched = solarNotes.find((n) => n.region === focusRegion)
+      return matched ? [matched] : [solarNotes[0]]
+    }
     if (!focusPlanet) return solarNotes
     const m = focusMoon,
       p = focusPlanet
@@ -757,17 +891,25 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       ? '本图收录它的 ' +
         p.moons.length +
         ' 颗天然卫星。打开卫星目录，可以沿其中一颗卫星的轨道观察。'
-      : '它没有已知的天然卫星。'
+      : '它目前没有已知的天然卫星。'
+    const periodText =
+      p.days > 3652
+        ? (p.days / 365.25).toFixed(p.days > 36525 ? 0 : 1) + ' 个地球年'
+        : Math.round(p.days).toLocaleString('zh-CN') + ' 个地球日'
+    const auText = p.au
+      ? p.periAU && p.apoAU && Math.abs(p.apoAU - p.periAU) > 1
+        ? `轨道半长轴约 ${p.au.toFixed(p.au >= 100 ? 0 : 1)} AU（近日点 ${p.periAU.toFixed(1)} AU，远日点 ${p.apoAU.toFixed(p.apoAU >= 100 ? 0 : 1)} AU），`
+        : `轨道半长轴约 ${p.au.toFixed(2)} AU，`
+      : ''
     return [
       {
         name: p.name,
         p: p.pos,
         body:
-          (p.kind ? '这颗' + p.kind : '它') +
+          (p.summary ? p.summary + ' ' : '') +
+          auText +
           '绕太阳一周约需 ' +
-          (p.days > 3652
-            ? (p.days / 365.25).toFixed(1) + ' 个地球年'
-            : Math.round(p.days).toLocaleString('zh-CN') + ' 个地球日') +
+          periodText +
           '。' +
           moons,
         source: p.source || 'https://ssd.jpl.nasa.gov/planets/phys_par.html',
@@ -787,8 +929,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         pin.className = 'map-pin'
         pin.dataset.note = String(i)
         pin.onclick = () => {
-          if (!galaxyView && !focusPlanet)
-            openRegion(note === solarNotes[1] ? 'main' : 'outer', note.p)
+          if (!galaxyView && !focusPlanet && 'region' in note)
+            openRegion((note as Note & { region: Belt }).region, note.p)
           else showNote(i)
         }
         pins.append(pin)
@@ -832,12 +974,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (open) {
       drawer(false)
       if (notesOpen) setNotes(false)
-    }
+    } else preview(null)
     ui.dockOpen = open
   }
   function openGalaxy() {
     if (deepTarget) leaveDeepTarget(true)
     if (galaxyView) return
+    if (!galaxyImage.src) galaxyImage.src = sources.Galaxy
     galaxyView = true
     focusPlanet = null
     focusMoon = null
@@ -850,15 +993,39 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   function drawCanvas() {
     if (!ctx) return
     ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-    ctx.fillStyle = '#080e18'
+    const bgGrad = ctx.createRadialGradient(
+      width * 0.5,
+      height * 0.45,
+      0,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.78,
+    )
+    bgGrad.addColorStop(0, '#071020')
+    bgGrad.addColorStop(0.55, '#040914')
+    bgGrad.addColorStop(1, '#02050b')
+    ctx.fillStyle = bgGrad
     ctx.fillRect(0, 0, width, height)
     const vector = v3(),
-      attr = stars.geometry.attributes.position
-    ctx.fillStyle = '#aabac6'
-    for (let i = 0; i < attr.count; i++) {
+      attr = stars.geometry.attributes.position,
+      colAttr = stars.geometry.attributes.color,
+      sizeAttr = stars.geometry.attributes.aSize,
+      twAttr = stars.geometry.attributes.aTwinkle
+    const step = attr.count > 2600 ? 2 : 1
+    for (let i = 0; i < attr.count; i += step) {
       vector.fromBufferAttribute(attr, i).add(camera.position)
       const q = project(vector)
-      if (q && q.x >= 0 && q.x < width && q.y >= 0 && q.y < height) ctx.fillRect(q.x, q.y, 1, 1)
+      if (!q || q.x < 0 || q.x >= width || q.y < 0 || q.y >= height) continue
+      const phase = twAttr ? twAttr.getX(i) : 0
+      const freq = twAttr ? twAttr.getY(i) : 1
+      const amp = twAttr ? twAttr.getZ(i) : 0.2
+      const pulse = 0.75 + 0.25 * (1 + amp * Math.sin(ambientTime * freq + phase))
+      const r = colAttr ? Math.min(255, Math.round(colAttr.getX(i) * 255)) : 176
+      const g = colAttr ? Math.min(255, Math.round(colAttr.getY(i) * 255)) : 196
+      const b = colAttr ? Math.min(255, Math.round(colAttr.getZ(i) * 255)) : 220
+      const sz = sizeAttr ? Math.min(2.6, Math.max(0.9, sizeAttr.getX(i) * 0.34)) : 1
+      ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, 0.72 * pulse).toFixed(2)})`
+      ctx.fillRect(q.x - sz * 0.5, q.y - sz * 0.5, sz, sz)
     }
     if (galaxyView) {
       drawGalaxy2D()
@@ -866,7 +1033,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     }
     if (belt.visible) {
       drawField2D(beltDust, 'rgba(219,184,137,.47)', 2)
+      drawField2D(hildaDust, 'rgba(206,162,118,.40)', 2)
+      drawField2D(trojanDust, 'rgba(202,166,120,.44)', 2)
+      drawField2D(centaurDust, 'rgba(136,192,206,.38)', 2)
+      drawField2D(neptuneTrojanDust, 'rgba(148,196,226,.34)', 2)
       drawField2D(kuiperDust, 'rgba(159,197,223,.37)', 2)
+      drawField2D(scatteredDust, 'rgba(166,174,232,.34)', 2)
+      drawField2D(oortDust, 'rgba(150,174,226,.22)', 3)
     }
     drawCanvasOrbits()
     const entries: { q: ScreenPoint; r: number; key: string | null; tint?: string }[] = []
@@ -888,12 +1061,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     entries.sort((a, b) => b.q.z - a.q.z)
     for (const { q, r, key, tint } of entries) {
       if (key === 'Sun') {
-        const g = ctx.createRadialGradient(q.x, q.y, r * 0.4, q.x, q.y, r * 3.8)
-        g.addColorStop(0, '#ffc25cbb')
-        g.addColorStop(0.3, '#ff9c4355')
-        g.addColorStop(1, '#ff9c4300')
+        const haloR = Math.min(r * 4.2, Math.max(width, height) * 0.85)
+        const g = ctx.createRadialGradient(q.x, q.y, r * 0.55, q.x, q.y, haloR)
+        g.addColorStop(0, 'rgba(255,244,210,0.82)')
+        g.addColorStop(0.22, 'rgba(255,204,116,0.44)')
+        g.addColorStop(0.48, 'rgba(255,156,68,0.16)')
+        g.addColorStop(0.76, 'rgba(250,126,42,0.04)')
+        g.addColorStop(1, 'rgba(240,100,28,0)')
         ctx.fillStyle = g
-        ctx.fillRect(q.x - r * 3.8, q.y - r * 3.8, r * 7.6, r * 7.6)
+        ctx.fillRect(q.x - haloR, q.y - haloR, haloR * 2, haloR * 2)
       }
       if (key && nearBody?.id === key && drawPlanet) {
         const pixels = detail.pixelsFor(key)
@@ -902,7 +1078,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       }
       const im = key ? images[key] : null
       if (im?.naturalWidth) {
-        const s = r * (key === 'Saturn' ? 128 / 28 : 128 / 49)
+        const refRad =
+          key === 'Saturn'
+            ? 28
+            : key === 'Quaoar'
+              ? 26
+              : key === 'Chariklo' || key === 'Chiron'
+                ? 30
+                : 49
+        const s = r * (128 / refRad)
         ctx.drawImage(im, q.x - s / 2, q.y - s / 2, s, s)
       } else {
         ctx.fillStyle = tint || '#cbb48b'
@@ -966,6 +1150,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     updateOrbitTargets()
   }
   function render(now: number) {
+    updateSpaceTime(ambientTime, pixelRatio)
     if (deepTarget) {
       if (nearBody) updateSurfaceDetail()
       advanceDeepModel()
@@ -982,8 +1167,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     updateOrbitPreview()
     fadeOrbits(now)
     if (galaxyView) updateGalaxyLayers()
-    if (renderer) renderer.render(scene, camera)
-    else {
+    if (renderer) {
+      updateBeltVisibility(camera, canvas.height)
+      renderer.render(scene, camera)
+    } else {
       scene.updateMatrixWorld()
       drawCanvas()
     }
@@ -993,6 +1180,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   let enteredAt = 0
   function land() {
     if (excursion || deepTarget || galaxyView || focusRegion) return
+    zoomTarget = null
     const world = focusPlanet ?? planets.find((p) => p.id === 'Mars')!
     const id = focusMoon?.name ?? world.id,
       name = focusMoon?.label ?? world.name
@@ -1015,8 +1203,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       camera.updateMatrixWorld()
       skyDome.position.copy(camera.position)
       stars.position.copy(camera.position)
-      if (renderer) renderer.render(scene, camera)
-      else {
+      shootingStars.position.copy(camera.position)
+      updateSpaceTime(ambientTime, pixelRatio)
+      if (renderer) {
+        updateBeltVisibility(camera, canvas.height)
+        renderer.render(scene, camera)
+      } else {
         scene.updateMatrixWorld()
         drawCanvas()
       }
@@ -1047,12 +1239,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     requestDraw()
   }
   let frame = 0,
-    last: number | null = null
+    last: number | null = null,
+    ambientTime = 0,
+    lastAmbientDraw = 0
   function tick(now: number) {
     frame = 0
     if (document.hidden) return
     const delta = last === null ? 0 : Math.min((now - last) / 1000, 0.12)
     last = now
+    if (!orbitMotion.matches) ambientTime += delta
     if (excursion && approach) {
       dirty = false
       const moving = excursion.draw(delta, width, height, approach, playing)
@@ -1077,11 +1272,38 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         else modelStep(clock)
       }
     }
-    if (playing || dirty || transition || fadingPaths.size) {
-      dirty = false
-      render(now)
+    if (zoomTarget !== null) {
+      if (pendingZoomPoint) {
+        pickZoomAnchor(pendingZoomPoint)
+        pendingZoomPoint = null
+      }
+      const remaining = Math.log(zoomTarget / zoom)
+      if (Math.abs(remaining) < 0.0005) {
+        applyZoom(zoomTarget)
+        zoomTarget = null
+      } else {
+        applyZoom(zoom * Math.exp(remaining * -Math.expm1(-delta / 0.055)))
+      }
+      dirty = true
     }
-    if (playing || transition || fadingPaths.size) frame = requestAnimationFrame(tick)
+    const activeMotion = playing || dirty || !!transition || fadingPaths.size > 0
+    if (activeMotion) {
+      dirty = false
+      lastAmbientDraw = now
+      render(now)
+    } else if (renderer && !orbitMotion.matches && now - lastAmbientDraw >= 33) {
+      // Keep distant stars gently twinkling and solar plasma flowing even when orbital clock is paused
+      lastAmbientDraw = now
+      updateSpaceTime(ambientTime, pixelRatio)
+      renderer.render(deepTarget ? deepTarget.scene : scene, camera)
+    }
+    const keepLoop =
+      playing ||
+      !!transition ||
+      fadingPaths.size > 0 ||
+      zoomTarget !== null ||
+      (!!renderer && !orbitMotion.matches)
+    if (!frame && keepLoop) frame = requestAnimationFrame(tick)
   }
   function requestDraw() {
     if (disposed) return
@@ -1112,7 +1334,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         if (
           pos &&
           x >= pos.x - 2 &&
-          x <= pos.x + label.offsetWidth + 2 &&
+          x <= pos.x + pos.width + 2 &&
           y >= pos.y &&
           y <= pos.y + 16
         )
@@ -1125,6 +1347,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     screenRay(x, y)
     if (saturn.anchor.visible && pointerRay.intersectObject(saturn.rings!, false).length)
       return { obj: saturn }
+    for (const p of worlds) {
+      if (p.minorRings && p.anchor.visible && pointerRay.intersectObject(p.minorRings, false).length)
+        return { obj: p }
+    }
     return null
   }
   function beltAt(x: number, y: number): { id: Belt; pos: T.Vector3 } | null {
@@ -1132,19 +1358,44 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       surface = ray.intersectPlane(ecliptic, v3())
     if (surface) {
       const r = surface.length()
-      if (r >= mainBand.inner && r <= mainBand.outer) return { id: 'main', pos: surface }
+      if (r >= mainBand.inner && r <= hildaBand.outer) return { id: 'main', pos: surface }
+      const jupA = planets[4].a
+      if (Math.abs(r - jupA) <= 9.5) {
+        const jupLon = Math.atan2(-planets[4].pos.z, planets[4].pos.x)
+        const hitLon = Math.atan2(-surface.z, surface.x)
+        const dLon = Math.atan2(Math.sin(hitLon - jupLon), Math.cos(hitLon - jupLon))
+        if (Math.abs(Math.abs(dLon) - Math.PI / 3) < 0.48) return { id: 'trojan', pos: surface }
+      }
+      if (
+        (r >= centaurBands.satUra.inner && r <= centaurBands.satUra.outer) ||
+        (r >= centaurBands.uraNep.inner && r <= centaurBands.uraNep.outer)
+      )
+        return { id: 'centaur', pos: surface }
       if (r >= outerBand.inner && r <= outerBand.outer) return { id: 'outer', pos: surface }
+      if (r >= scatteredBand.inner && r <= oortBand.outer) return { id: 'scattered', pos: surface }
     }
     pointerRay.params.Points.threshold = clamp((zoom * 2) / height, 0.12, 1.2)
-    const dust = pointerRay.intersectObjects<T.Points>([beltDust, kuiperDust], false)[0]
-    return dust
-      ? {
-          id: dust.object === beltDust ? 'main' : 'outer',
-          pos: dust.object.localToWorld(
-            v3().fromBufferAttribute(dust.object.geometry.attributes.position, dust.index!),
-          ),
-        }
-      : null
+    const dust = pointerRay.intersectObjects<T.Points>(
+      [beltDust, hildaDust, trojanDust, centaurDust, neptuneTrojanDust, kuiperDust, scatteredDust, oortDust],
+      false,
+    )[0]
+    if (!dust) return null
+    const id: Belt =
+      dust.object === beltDust || dust.object === hildaDust
+        ? 'main'
+        : dust.object === trojanDust
+          ? 'trojan'
+          : dust.object === centaurDust || dust.object === neptuneTrojanDust
+            ? 'centaur'
+            : dust.object === kuiperDust
+              ? 'outer'
+              : 'scattered'
+    return {
+      id,
+      pos: dust.object.localToWorld(
+        v3().fromBufferAttribute(dust.object.geometry.attributes.position, dust.index!),
+      ),
+    }
   }
   function stopFlight() {
     if (transition) {
@@ -1152,13 +1403,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       transition = null
     }
   }
-  function changeZoom(factor: number, clientX?: number, clientY?: number) {
-    stopFlight()
-    const next = clamp(zoom * factor, ...cameraLimits())
-    if (clientX !== undefined && clientY !== undefined) {
+  function pickZoomAnchor(point: Point | null) {
+    zoomAnchor.set(0, 0, 0)
+    if (point) {
       const box = canvas.getBoundingClientRect(),
-        x = clientX - box.left,
-        y = clientY - box.top
+        x = point.x - box.left,
+        y = point.y - box.top
       const hit = deepTarget ? deepBodyAt(x, y) : galaxyView ? null : bodyAt(x, y)
       const region = deepTarget || galaxyView || hit ? null : beltAt(x, y)
       const through = hit
@@ -1173,13 +1423,36 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         through,
       )
       const anchor = screenRay(x, y).intersectPlane(plane, v3())
-      if (anchor) panOffset.addScaledVector(anchor.sub(target), 1 - next / zoom)
+      if (anchor) zoomAnchor.copy(anchor).sub(target)
     }
-    zoom = next
-    moveCamera(performance.now())
+  }
+  function changeZoom(factor: number, clientX?: number, clientY?: number, smooth = true) {
+    stopFlight()
+    const next = clamp((smooth ? zoomTarget ?? zoom : zoom) * factor, ...cameraLimits())
+    const point = clientX !== undefined && clientY !== undefined ? { x: clientX, y: clientY } : null
+    if (smooth && !orbitMotion.matches) {
+      // Trackpads can deliver several wheel events between paints. Pick the latest anchor once.
+      pendingZoomPoint = point
+      if (!point) zoomAnchor.set(0, 0, 0)
+      if (!frame && !playing) last = performance.now()
+      zoomTarget = next
+    } else {
+      zoomTarget = null
+      pendingZoomPoint = null
+      pickZoomAnchor(point)
+      applyZoom(next)
+      moveCamera(performance.now())
+    }
     requestDraw()
   }
+  function applyZoom(next: number) {
+    const ratio = next / zoom
+    panOffset.addScaledVector(zoomAnchor, 1 - ratio)
+    zoomAnchor.multiplyScalar(ratio)
+    zoom = next
+  }
   function panView(dx: number, dy: number) {
+    zoomTarget = null
     stopFlight()
     const units = (2 * zoom * Math.tan((camera.fov * rad) / 2)) / height
     panOffset.addScaledVector(v3().setFromMatrixColumn(camera.matrixWorld, 0), -dx * units)
@@ -1188,6 +1461,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     requestDraw()
   }
   function changeAngle(dx: number, dy: number) {
+    zoomTarget = null
     stopFlight()
     yaw -= dx * 0.007
     pitch = clamp(pitch + dy * 0.007, -1.52, 1.52)
@@ -1244,11 +1518,9 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
             ? object instanceof Moon
               ? object.label
               : object.name
-            : region?.id === 'main'
-              ? '小行星带'
-              : region
-                ? '柯伊伯带'
-                : ''
+            : region
+              ? regionLabels[region.id]
+              : ''
           canvas.style.cursor = caption ? 'pointer' : ''
           if (canvas.title !== caption) canvas.title = caption
         }
@@ -1266,7 +1538,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         const span = pairDistance(),
           mid = pairCenter()
         if (midpoint) panView(mid.x - midpoint.x, mid.y - midpoint.y)
-        if (span > 2 && lastPair > 2) changeZoom(lastPair / span, mid.x, mid.y)
+        if (span > 2 && lastPair > 2) changeZoom(lastPair / span, mid.x, mid.y, false)
         midpoint = mid
         lastPair = span
       }
@@ -1396,7 +1668,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     rowPreview = body
     requestDraw()
   }
-  function updateView(changeScale = false) {
+  function updateView(changeScale = false, keepDirection = false) {
     rowPreview = null
     hoverPoint = null
     hoveredBody = null
@@ -1410,11 +1682,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       ? '银河系'
       : focusMoon?.label ||
         focusPlanet?.name ||
-        (focusRegion === 'main' ? '小行星带' : focusRegion ? '外太阳系' : '太阳系')
+        (focusRegion ? regionLabels[focusRegion] : '太阳系')
     ui.tracksDisabled = galaxyView
     refreshNotes()
     syncPaths()
-    aim(!changeScale, !changeScale && !!(focusPlanet || focusRegion))
+    aim(!changeScale, !changeScale && keepDirection)
     requestDraw()
     if (changeScale && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
       canvas.animate([{ opacity: 0.24 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' })
@@ -1432,7 +1704,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     drawer(false)
     ui.search = ''
     if (leavingGalaxy) modelStep(clock)
-    updateView(leavingGalaxy)
+    updateView(leavingGalaxy, false)
   }
   function openMoon(m: Moon) {
     if (focusPlanet !== m.parent || galaxyView) openPlanet(m.parent)
@@ -1440,7 +1712,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     focusMoon = m
     focusRegion = null
     if (width < 620) drawer(false)
-    updateView()
+    updateView(false, false)
   }
   function openRegion(id: Belt, at?: T.Vector3) {
     if (deepTarget) leaveDeepTarget(false)
@@ -1451,10 +1723,19 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     focusMoon = null
     focusPlanet = null
     if (wasGalactic) modelStep(clock)
-    regionCenter.copy(at || smallBodies.find((p) => p.region === id)!.pos)
+    const anchorIds: Record<Belt, string> = {
+      main: 'Ceres',
+      trojan: 'Patroclus',
+      centaur: 'Chariklo',
+      outer: 'Pluto',
+      scattered: 'Gonggong',
+    }
+    const anchorBody =
+      smallBodies.find((p) => p.id === anchorIds[id]) || smallBodies.find((p) => p.region === id)!
+    regionCenter.copy(at || anchorBody.pos)
     setDock(false)
     ui.search = ''
-    updateView(wasGalactic)
+    updateView(wasGalactic, true)
     drawer(true)
   }
   const catalogEntries = createArchive(worlds)
@@ -1674,17 +1955,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     ui.group = entry.group
     d.scene.add(d.background)
     if (!form && renderer) {
-      d.sky = new T.Mesh(
-        skyDome.geometry,
-        new T.MeshBasicMaterial({
-          map: textures.Sky,
-          color: 0x667788,
-          side: T.BackSide,
-          transparent: true,
-          opacity: 0.58,
-          depthWrite: false,
-        }),
-      )
+      d.sky = new T.Mesh(skyDome.geometry, createCosmicSkyMaterial(0.68))
       d.sky.renderOrder = -10
       d.sky.rotation.copy(skyDome.rotation)
       d.scene.add(d.sky)
@@ -1753,6 +2024,16 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   resize()
   aim(false)
   syncPaths()
+  if (renderer && loadTexture) {
+    loadTexture(sources.Sky, listeners.signal, {}, (texture) => {
+      textures.Sky?.dispose()
+      textures.Sky = texture
+      setSkyTexture(texture)
+      requestDraw()
+    })
+    // Submit shader programs together so the driver can compile them in parallel.
+    renderer.compile(scene, camera)
+  }
   setPlaying(playing)
   function dispose() {
     disposed = true
@@ -1786,7 +2067,6 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     for (const geometry of geometries) geometry.dispose()
     for (const material of materials) material.dispose()
     for (const texture of Object.values(textures)) texture?.dispose()
-    sunGlow.material.map?.dispose()
     models.dispose()
     renderer?.dispose()
     scene.clear()

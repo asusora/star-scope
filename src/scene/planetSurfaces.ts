@@ -12,6 +12,23 @@ const radiiAndDay: Record<string, [number, number, number]> = {
   Saturn: [60268, 58232, 0.44401],
   Uranus: [25559, 25362, 0.71833],
   Neptune: [24764, 24622, 0.67125],
+  Ceres: [482, 469.7, 0.378],
+  Vesta: [262.7, 262.7, 0.2226],
+  Psyche: [111, 111, 0.1748],
+  Chiron: [105, 105, 0.2466],
+  Chariklo: [125, 125, 0.2918],
+  Pholus: [70, 70, 0.416],
+  Pluto: [1188.3, 1188.3, 6.387],
+  Orcus: [458, 458, 0.549],
+  Haumea: [816, 816, 0.1631],
+  Quaoar: [555, 555, 0.7366],
+  Arrokoth: [18, 18, 0.663],
+  Makemake: [715, 715, 0.951],
+  Gonggong: [615, 615, 0.933],
+  Eris: [1163, 1163, 15.786],
+  Farfarout: [200, 200, 0.65],
+  VP113: [250, 250, 0.78],
+  Sedna: [498, 498, 0.428],
 }
 
 export const ringInner = 1.23
@@ -270,9 +287,97 @@ const surfaceProfiles: Record<string, SurfaceProfile> = {
   Juno: { ...defaultRockyProfile, bumpScale: 0.044, regolith: 0.42 },
   Hygiea: { ...defaultRockyProfile, bumpScale: 0.04, regolith: 0.4 },
   Haumea: { ...icyMoonProfile, bumpScale: 0.022, specular: 0x2a343d, shininess: 30 },
-  Eris: { ...icyMoonProfile, bumpScale: 0.024, specular: 0x28323a, shininess: 28 },
+  Eris: {
+    ...icyMoonProfile,
+    bumpScale: 0.024,
+    specular: 0x323e4a,
+    shininess: 32,
+    rimColor: [0.76, 0.88, 1.0],
+    rimStrength: 0.16,
+  },
   Makemake: { ...defaultRockyProfile, bumpScale: 0.028, specular: 0x181512, shininess: 14 },
   Ceres: { ...defaultRockyProfile, bumpScale: 0.038, regolith: 0.4 },
+  Psyche: {
+    ...defaultRockyProfile,
+    bumpScale: 0.038,
+    specular: 0x626e7c,
+    shininess: 54,
+    regolith: 0.18,
+    rimColor: [0.68, 0.76, 0.86],
+    rimPower: 3.4,
+    rimStrength: 0.12,
+  },
+  Eurybates: { ...defaultRockyProfile, bumpScale: 0.044, regolith: 0.44 },
+  Queta: { ...defaultRockyProfile, bumpScale: 0.044, regolith: 0.44 },
+  Patroclus: { ...defaultRockyProfile, bumpScale: 0.04, regolith: 0.4 },
+  Menoetius: { ...defaultRockyProfile, bumpScale: 0.04, regolith: 0.4 },
+  Chiron: {
+    ...icyMoonProfile,
+    bumpScale: 0.034,
+    specular: 0x243440,
+    shininess: 22,
+    regolith: 0.24,
+    rimColor: [0.62, 0.84, 0.98],
+    rimPower: 3.0,
+    rimStrength: 0.22,
+  },
+  Chariklo: { ...defaultRockyProfile, bumpScale: 0.038, specular: 0x181b1e, shininess: 14, regolith: 0.36 },
+  Pholus: { ...defaultRockyProfile, bumpScale: 0.038, specular: 0x1c1210, shininess: 12, regolith: 0.34 },
+  Orcus: {
+    ...icyMoonProfile,
+    bumpScale: 0.024,
+    specular: 0x303e4a,
+    shininess: 34,
+    rimColor: [0.72, 0.86, 0.98],
+    rimStrength: 0.14,
+  },
+  Vanth: { ...defaultRockyProfile, bumpScale: 0.036, regolith: 0.38 },
+  Quaoar: {
+    ...icyMoonProfile,
+    bumpScale: 0.028,
+    specular: 0x28201e,
+    shininess: 20,
+    regolith: 0.24,
+    rimColor: [0.84, 0.64, 0.56],
+    rimStrength: 0.1,
+  },
+  Weywot: { ...defaultRockyProfile, bumpScale: 0.038, regolith: 0.4 },
+  Arrokoth: { ...defaultRockyProfile, bumpScale: 0.036, specular: 0x160e0c, shininess: 10, regolith: 0.38 },
+  Gonggong: {
+    ...icyMoonProfile,
+    bumpScale: 0.026,
+    specular: 0x2a1d1c,
+    shininess: 22,
+    regolith: 0.22,
+    rimColor: [0.86, 0.52, 0.46],
+    rimStrength: 0.12,
+  },
+  Xiangliu: { ...defaultRockyProfile, bumpScale: 0.038, regolith: 0.4 },
+  Farfarout: {
+    ...icyMoonProfile,
+    bumpScale: 0.03,
+    specular: 0x262e3a,
+    shininess: 24,
+    rimColor: [0.7, 0.8, 0.96],
+    rimStrength: 0.12,
+  },
+  VP113: {
+    ...icyMoonProfile,
+    bumpScale: 0.026,
+    specular: 0x2e262a,
+    shininess: 26,
+    rimColor: [0.88, 0.74, 0.78],
+    rimStrength: 0.12,
+  },
+  Sedna: {
+    ...icyMoonProfile,
+    bumpScale: 0.026,
+    specular: 0x2c1b18,
+    shininess: 24,
+    regolith: 0.22,
+    rimColor: [0.88, 0.48, 0.38],
+    rimStrength: 0.14,
+  },
   Phobos: { ...defaultRockyProfile, bumpScale: 0.046, regolith: 0.45 },
   Deimos: { ...defaultRockyProfile, bumpScale: 0.04, regolith: 0.42 },
 }
@@ -968,6 +1073,85 @@ export function createHaumeaRing(radius: number, axis: T.Group) {
     { pos: 0.5, width: 0.36, alpha: 0.14, color: [176, 198, 218] },
   ])
   return buildRingMesh(radius * 2.02, radius * 2.24, tex, axis, radius, 0.69, 0.56)
+}
+
+/** 10199 Chariklo's razor-sharp twin water-ice rings: inner denser Oiapoque & outer thinner Chuí. */
+export function createCharikloRings(radius: number, axis: T.Group) {
+  const tex = makeRadialRingTexture([
+    // Faint dusty halo between body and rings
+    { pos: 0.18, width: 0.12, alpha: 0.06, color: [164, 184, 200] },
+    // Oiapoque (dense inner ring, ~7 km wide)
+    { pos: 0.42, width: 0.042, alpha: 0.78, color: [208, 224, 238] },
+    { pos: 0.42, width: 0.09, alpha: 0.18, color: [176, 198, 218] },
+    // Crisp 9 km gap, then Chuí (narrower outer ring, ~3 km wide)
+    { pos: 0.74, width: 0.026, alpha: 0.52, color: [194, 216, 234] },
+  ])
+  return buildRingMesh(radius * 1.56, radius * 2.12, tex, axis, radius, 0.74, 0.84)
+}
+
+/** 2060 Chiron's evolving icy-dust ring & disc system observed by stellar occultations (2011–2023). */
+export function createChironRings(radius: number, axis: T.Group) {
+  const tex = makeRadialRingTexture([
+    { pos: 0.36, width: 0.055, alpha: 0.42, color: [176, 208, 228] },
+    { pos: 0.54, width: 0.04, alpha: 0.36, color: [192, 220, 238] },
+    { pos: 0.52, width: 0.28, alpha: 0.14, color: [148, 184, 212] },
+  ])
+  return buildRingMesh(radius * 1.58, radius * 2.24, tex, axis, radius, 0.88, 0.68)
+}
+
+/** 50000 Quaoar's famous beyond-Roche-limit double rings (inner faint Q2R & wide outer clumpy Q1R, CHEOPS 2023). */
+export function createQuaoarRings(radius: number, axis: T.Group) {
+  const tex = makeRadialRingTexture([
+    // Inner faint Q2R ring (~2,520 km)
+    { pos: 0.22, width: 0.032, alpha: 0.28, color: [196, 186, 184] },
+    { pos: 0.22, width: 0.08, alpha: 0.09, color: [178, 168, 168] },
+    // Prominent outer Q1R ring (~4,100 km, far outside classical Roche limit!)
+    { pos: 0.84, width: 0.044, alpha: 0.68, color: [222, 212, 208] },
+    { pos: 0.84, width: 0.1, alpha: 0.18, color: [194, 180, 178] },
+  ])
+  return buildRingMesh(radius * 1.92, radius * 3.38, tex, axis, radius, 1.0, 0.76)
+}
+
+/** Translucent active cometary CO/dust coma halo around active Centaur 2060 Chiron (95P/Chiron). */
+export function createChironComa(radius: number, geometry: T.SphereGeometry) {
+  const mat = new T.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: T.BackSide,
+    blending: T.AdditiveBlending,
+    uniforms: {
+      uLightPos: { value: new T.Vector3(0, 0, 0) },
+    },
+    vertexShader: `
+      varying vec3 vNormalW;
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        vNormalW = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uLightPos;
+      varying vec3 vNormalW;
+      varying vec3 vWorldPos;
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        vec3 toSun = normalize(uLightPos - vWorldPos);
+        float ndv = abs(dot(normalize(vNormalW), viewDir));
+        float shell = pow(ndv, 1.65) * smoothstep(0.0, 0.35, ndv);
+        float sunBias = 0.55 + 0.45 * smoothstep(-0.4, 0.8, dot(-vNormalW, toSun));
+        float alpha = shell * sunBias * 0.24;
+        if (alpha < 0.002) discard;
+        gl_FragColor = vec4(0.62, 0.84, 1.0, alpha);
+      }
+    `,
+  })
+  const mesh = new T.Mesh(geometry, mat)
+  mesh.scale.setScalar(radius * 2.75)
+  mesh.renderOrder = 2
+  return mesh
 }
 
 export interface CraterSpec {

@@ -5451,5 +5451,80 @@
       "w": 0,
       "frame": "ecliptic"
     }
+  ],
+  "Eurybates": [
+    {
+      "name": "Queta",
+      "num": "I",
+      "des": "S/2018 (3548) 1",
+      "a": 2350,
+      "period": 82.46,
+      "e": 0.125,
+      "inc": 131,
+      "node": 207,
+      "w": 0,
+      "frame": "ecliptic",
+      "year": 2018
+    }
+  ],
+  "Patroclus": [
+    {
+      "name": "Menoetius",
+      "num": "I",
+      "des": "S/2001 (617) 1",
+      "a": 680,
+      "period": 4.2827,
+      "e": 0.02,
+      "inc": 0,
+      "node": 0,
+      "w": 0,
+      "frame": "equatorial",
+      "year": 2001
+    }
+  ],
+  "Orcus": [
+    {
+      "name": "Vanth",
+      "num": "I",
+      "des": "S/2005 (90482) 1",
+      "a": 9000,
+      "period": 9.5392,
+      "e": 0.001,
+      "inc": 90.2,
+      "node": 325.8,
+      "w": 0,
+      "frame": "ecliptic",
+      "year": 2005
+    }
+  ],
+  "Quaoar": [
+    {
+      "name": "Weywot",
+      "num": "I",
+      "des": "S/2006 (50000) 1",
+      "a": 13300,
+      "period": 12.431,
+      "e": 0.056,
+      "inc": 15,
+      "node": 0,
+      "w": 0,
+      "frame": "equatorial",
+      "year": 2006
+    }
+  ],
+  "Gonggong": [
+    {
+      "name": "Xiangliu",
+      "num": "I",
+      "des": "S/2010 (225088) 1",
+      "a": 24020,
+      "period": 25.221,
+      "e": 0.29,
+      "inc": 83,
+      "node": 112,
+      "w": 0,
+      "frame": "ecliptic",
+      "year": 2010
+    }
   ]
 }

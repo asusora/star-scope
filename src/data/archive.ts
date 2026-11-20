@@ -5,6 +5,11 @@ export const moonSources: Record<string, string> = {
   Makemake: 'https://arxiv.org/abs/2509.05880',
   Haumea: 'https://doi.org/10.1088/0004-6256/137/6/4766',
   Eris: 'https://arxiv.org/abs/2009.13733',
+  Orcus: 'https://doi.org/10.1088/0004-6256/139/6/2700',
+  Quaoar: 'https://doi.org/10.1038/s41586-022-05629-6',
+  Gonggong: 'https://doi.org/10.1016/j.icarus.2019.03.013',
+  Patroclus: 'https://doi.org/10.1038/nature04350',
+  Eurybates: 'https://doi.org/10.3847/PSJ/abb772',
 }
 export function normalized(s: string) {
   return String(s)
@@ -233,26 +238,62 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
       source: 'https://science.nasa.gov/exoplanet-catalog/' + id + '/',
     })
   }
+  const regionNames: Record<string, string> = {
+    main: '主小行星带（火星–木星之间）',
+    trojan: '木星特洛伊群（L4/L5 共轨区）',
+    centaur: '半人马小天体带（巨行星之间）',
+    outer: '柯伊伯带（海王星外 30–50 AU）',
+    scattered: '离散盘与内奥尔特云（50–1000 AU）',
+  }
+  const worldAliases: Record<string, string> = {
+    Psyche: '16 Psyche 金属小行星 灵神星号',
+    Eurybates: '3548 Eurybates 露西号 希腊营 L4',
+    Patroclus: '617 Patroclus 露西号 特洛伊营 L5',
+    Chiron: '2060 Chiron 95P 凯龙',
+    Chariklo: '10199 Chariklo 查莉克洛 环带',
+    Pholus: '5145 Pholus 福罗斯',
+    Orcus: '90482 Orcus 反冥王星 亡神',
+    Quaoar: '50000 Quaoar 夸欧尔 创神',
+    Arrokoth: '486958 Arrokoth 2014 MU69 天涯海角 Ultima Thule',
+    Gonggong: '225088 Gonggong 2007 OR10 共工',
+    Farfarout: '2018 AG37 远极星 Farfarout 最远天体',
+    VP113: '2012 VP113 拜登 类赛德娜 分离天体',
+    Sedna: '90377 Sedna 赛德娜 塞德娜 内奥尔特云',
+  }
   for (const p of worlds) {
+    const facts: string[][] = [
+      ['类别', p.kind || '行星'],
+      ['卫星数', String(p.moons.length)],
+      ['公转周期', (p.days / 365.25).toFixed(p.days > 36525 ? 0 : 2) + ' 年'],
+    ]
+    if (p.au) {
+      facts.push([
+        '日心轨道',
+        p.periAU && p.apoAU && Math.abs(p.apoAU - p.periAU) > 1
+          ? `${p.au.toFixed(p.au >= 100 ? 0 : 1)} AU（${p.periAU.toFixed(1)}–${p.apoAU.toFixed(p.apoAU >= 100 ? 0 : 1)} AU）`
+          : `${p.au.toFixed(2)} AU`,
+      ])
+    }
+    if (p.region && regionNames[p.region]) {
+      facts.push(['所属区域', regionNames[p.region]])
+    }
     catalogEntries.push({
       id: p.id,
       title: p.name,
-      code: p.id,
+      code: p.code || p.id,
+      alt: worldAliases[p.id],
       group: '太阳系',
       photo: thumbs[p.id],
       caption: '场景模型',
       object: p,
-      facts: [
-        ['类别', p.kind || '行星'],
-        ['卫星数', String(p.moons.length)],
-        ['公转周期', (p.days / 365.25).toFixed(2) + ' 年'],
-      ],
+      facts,
       body:
-        p.region === 'main'
+        p.summary ||
+        (p.region === 'main'
           ? '位于火星和木星之间的主小行星带。'
           : p.region === 'outer'
-            ? '轨道延伸至海王星之外，可在外太阳系视图中沿轨道跟随观察。'
-            : '从三维场景靠近这颗行星，可以跟随它公转并查看卫星目录。',
+            ? '轨道延伸至海王星之外，可在柯伊伯带视图中沿轨道跟随观察。'
+            : '从三维场景靠近这颗行星，可以跟随它公转并查看卫星目录。'),
       source: p.source || 'https://science.nasa.gov/' + p.id.toLowerCase() + '/',
     })
     for (const m of p.moons) {

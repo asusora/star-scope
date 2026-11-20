@@ -1,7 +1,9 @@
 import rawCatalog from './moons.json'
-import { Moon, World, type MoonRecord } from '../scene/types'
+import { Moon, World, type Belt, type MoonRecord } from '../scene/types'
 import { rad } from '../scene/math'
+
 const catalog: Record<string, MoonRecord[]> = rawCatalog
+
 export const declinations: Record<string, number> = {
   Mercury: 0.034,
   Venus: 177.36,
@@ -11,7 +13,23 @@ export const declinations: Record<string, number> = {
   Saturn: 26.73,
   Uranus: 97.77,
   Neptune: 28.32,
+  Pluto: 119.6,
+  Orcus: 22.0,
+  Haumea: 28.2,
+  Quaoar: 14.0,
+  Arrokoth: 98.0,
+  Makemake: 29.0,
+  Gonggong: 30.5,
+  Eris: 78.0,
+  Farfarout: 18.0,
+  VP113: 24.0,
+  Sedna: 25.0,
+  Chiron: 32.0,
+  Chariklo: 38.0,
+  Pholus: 24.0,
+  Psyche: 95.0,
 }
+
 export const featured: Record<string, string[]> = {
   Mercury: [],
   Venus: [],
@@ -22,6 +40,22 @@ export const featured: Record<string, string[]> = {
   Uranus: ['Titania', 'Oberon', 'Ariel', 'Umbriel', 'Miranda'],
   Neptune: ['Triton', 'Proteus', 'Nereid'],
 }
+
+interface SmallOrbitRecord {
+  a: number
+  e: number
+  i: number
+  om: number
+  w: number
+  per: number
+  code: string
+  kind: string
+  source: string
+  summary: string
+  lagrangeDeg?: number
+  prominent?: boolean
+}
+
 export function createSolarSystem() {
   const planets = (
     [
@@ -38,8 +72,9 @@ export function createSolarSystem() {
     ([id, name, a, r, days, phase, e, inc, node]) =>
       new World({ id, name, a, r, days, phase: phase * rad, e, inc, node }, catalog[id]),
   )
-  // Bound the entire planet + satellite system, including the far edge of each
-  // moon at apoapsis. Adjacent heliocentric shells must be disjoint at all phases.
+
+  // Bound the entire planet + satellite/ring system, including moon apoapsis.
+  // Adjacent heliocentric shells remain disjoint at all orbital phases.
   const systemRadii: Record<string, number> = {
     Earth: 2.9,
     Mars: 2.7,
@@ -47,94 +82,486 @@ export function createSolarSystem() {
     Saturn: 3.9,
     Uranus: 2.9,
     Neptune: 2.9,
+    Eurybates: 3.0,
+    Patroclus: 3.4,
+    Chiron: 3.0,
+    Chariklo: 2.7,
     Pluto: 4.2,
+    Orcus: 3.8,
     Haumea: 3.5,
+    Quaoar: 4.8,
     Makemake: 3.5,
-    Eris: 3.5,
+    Gonggong: 3.8,
+    Eris: 3.6,
   }
-  const systemRadius = (id: string, r: number) => r * (systemRadii[id] || 1)
+  const systemRadius = (id: string, r: number) => r * (systemRadii[id] || 1.3)
+
+  // Preserve clear interplanetary corridors for real belts:
+  // Mars-Jupiter (Main Belt + Hilda 3:2), Jupiter-Saturn, Saturn-Uranus & Uranus-Neptune (Centaurs).
+  const interplanetaryGaps: Record<string, number> = {
+    Jupiter: 28,
+    Saturn: 8,
+    Uranus: 18,
+    Neptune: 12,
+  }
   for (const [i, p] of planets.entries()) {
     p.extent = systemRadius(p.id, p.r)
     if (!i) continue
     const prev = planets[i - 1],
-      gap = p.id === 'Jupiter' ? 19 : 2.25
+      gap = interplanetaryGaps[p.id] ?? 2.25
     const minPeri = prev.a * (1 + prev.e) + prev.extent + gap + p.extent
     p.a = Math.max(p.a, minPeri / (1 - p.e))
   }
+
   const mars = planets[3],
     jupiter = planets[4],
+    saturn = planets[5],
+    uranus = planets[6],
     neptune = planets[7]
+
   const mainBand = {
-    inner: mars.a * (1 + mars.e) + mars.extent + 1,
-    outer: jupiter.a * (1 - jupiter.e) - jupiter.extent - 1,
+    inner: mars.a * (1 + mars.e) + mars.extent + 1.2,
+    outer: jupiter.a * (1 - jupiter.e) - jupiter.extent - 7.5,
   }
-  const kuiperInner = neptune.a * (1 + neptune.e) + neptune.extent + 2
-  const outerBand = { inner: kuiperInner, outer: kuiperInner + 41 }
+  const hildaBand = {
+    inner: mainBand.outer + 1.2,
+    outer: jupiter.a * (1 - jupiter.e) - jupiter.extent - 1.2,
+  }
+  const centaurBands = {
+    jupSat: {
+      inner: jupiter.a * (1 + jupiter.e) + jupiter.extent + 1.0,
+      outer: saturn.a * (1 - saturn.e) - saturn.extent - 1.0,
+    },
+    satUra: {
+      inner: saturn.a * (1 + saturn.e) + saturn.extent + 1.2,
+      outer: uranus.a * (1 - uranus.e) - uranus.extent - 1.2,
+    },
+    uraNep: {
+      inner: uranus.a * (1 + uranus.e) + uranus.extent + 1.2,
+      outer: neptune.a * (1 - neptune.e) - neptune.extent - 1.2,
+    },
+    full: {
+      inner: jupiter.a * (1 + jupiter.e) + jupiter.extent + 1.0,
+      outer: neptune.a * (1 - neptune.e) - neptune.extent - 1.2,
+    },
+  }
+  const kuiperInner = neptune.a * (1 + neptune.e) + neptune.extent + 3
+  const outerBand = { inner: kuiperInner, outer: kuiperInner + 56 }
+  const scatteredBand = { inner: outerBand.outer, outer: outerBand.outer + 92 }
+  const oortBand = { inner: scatteredBand.outer, outer: scatteredBand.outer + 165 }
   const bandMid = (band: { inner: number; outer: number }) => (band.inner + band.outer) / 2
-  const smallOrbits = {
-    Pluto: { a: 39.48, e: 0.249, i: 17.14, om: 110.3, w: 113.8, per: 90560 },
-    Ceres: { e: 0.0797, a: 2.77, i: 10.6, om: 80.2, w: 73.3, per: 1680.0 },
-    Eris: { e: 0.438, a: 67.9, i: 43.9, om: 36.0, w: 151.0, per: 205000.0 },
-    Haumea: { e: 0.194, a: 43.1, i: 28.2, om: 122.0, w: 241.0, per: 103000.0 },
-    Hygiea: { e: 0.107, a: 3.15, i: 3.83, om: 283.0, w: 312.0, per: 2040.0 },
-    Juno: { e: 0.256, a: 2.67, i: 13.0, om: 170.0, w: 248.0, per: 1590.0 },
-    Makemake: { e: 0.159, a: 45.6, i: 29.0, om: 79.3, w: 297.0, per: 112000.0 },
-    Pallas: { e: 0.231, a: 2.77, i: 34.9, om: 173.0, w: 311.0, per: 1680.0 },
-    Vesta: { e: 0.0902, a: 2.36, i: 7.14, om: 104.0, w: 151.0, per: 1330.0 },
+
+  const kuiperSlope = (outerBand.outer - outerBand.inner) / (50 - 30.07)
+  const mapOuterAU = (au: number) =>
+    au <= 50
+      ? outerBand.inner + (au - 30.07) * kuiperSlope
+      : outerBand.outer + Math.log(au / 50) * 86
+
+  const sbdb = 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr='
+
+  const smallOrbits: Record<string, SmallOrbitRecord> = {
+    // ── Main Asteroid Belt (Mars ↔ Jupiter, 2.1–3.3 AU) ──
+    Ceres: {
+      a: 2.77,
+      e: 0.0797,
+      i: 10.6,
+      om: 80.2,
+      w: 73.3,
+      per: 1680.0,
+      code: '1 Ceres',
+      kind: '矮行星',
+      source: 'https://science.nasa.gov/dwarf-planets/ceres/',
+      summary: '主小行星带最大的天体，也是内太阳系唯一的矮行星。黎明号探测揭示了奥卡托坑内明亮的碳酸钠盐穹与阿胡纳冰火山。',
+      prominent: true,
+    },
+    Vesta: {
+      a: 2.36,
+      e: 0.0902,
+      i: 7.14,
+      om: 104.0,
+      w: 151.0,
+      per: 1330.0,
+      code: '4 Vesta',
+      kind: '原行星小行星',
+      source: 'https://science.nasa.gov/solar-system/asteroids/4-vesta/',
+      summary: '主带第二大质量天体。黎明号测绘了其南极巨大的雷亚希尔维亚撞击盆地、22 千米高中央峰与赤道槽沟群。',
+    },
+    Pallas: {
+      a: 2.77,
+      e: 0.231,
+      i: 34.9,
+      om: 173.0,
+      w: 311.0,
+      per: 1680.0,
+      code: '2 Pallas',
+      kind: '小行星',
+      source: sbdb + 'Pallas',
+      summary: '高倾角大型主带小行星。甚大望远镜高分辨率成像显示其布满密集撞击坑，外观宛如饱经撞击的高尔夫球。',
+    },
+    Juno: {
+      a: 2.67,
+      e: 0.256,
+      i: 13.0,
+      om: 170.0,
+      w: 248.0,
+      per: 1590.0,
+      code: '3 Juno',
+      kind: '小行星',
+      source: sbdb + 'Juno',
+      summary: '较大的石质 S 型主带小行星，表面保留着一座跨度约 100 千米的近期大型撞击坑。',
+    },
+    Hygiea: {
+      a: 3.15,
+      e: 0.107,
+      i: 3.83,
+      om: 283.0,
+      w: 312.0,
+      per: 2040.0,
+      code: '10 Hygiea',
+      kind: '碳质小行星',
+      source: sbdb + 'Hygiea',
+      summary: '主带第四大天体，表面漆黑富含碳质物质。甚大望远镜观测表明其外形近乎球体，是潜在矮行星候选体。',
+    },
+    Psyche: {
+      a: 2.923,
+      e: 0.1339,
+      i: 3.1,
+      om: 150.0,
+      w: 229.6,
+      per: 1825.6,
+      code: '16 Psyche',
+      kind: '金属小行星',
+      source: 'https://science.nasa.gov/mission/psyche/',
+      summary: 'NASA 灵神星号探测目标，富含铁镍金属与硅酸盐岩石，被视为太阳系早期原行星裸露的金属核残骸。',
+      prominent: true,
+    },
+
+    // ── Jupiter Trojans (5.2 AU, L4 Greek Camp & L5 Trojan Camp) ──
+    Eurybates: {
+      a: 5.202,
+      e: 0.089,
+      i: 8.06,
+      om: 43.6,
+      w: 27.3,
+      per: 4332.6,
+      code: '3548 Eurybates',
+      kind: '特洛伊小行星',
+      source: 'https://science.nasa.gov/mission/lucy/',
+      summary: '位于木星轨道前方 60° 的 L4 希腊营，是 NASA 露西号的首颗特洛伊探测目标，哈勃为其发现了卫星奎塔。',
+      lagrangeDeg: 60,
+    },
+    Patroclus: {
+      a: 5.211,
+      e: 0.139,
+      i: 22.05,
+      om: 44.3,
+      w: 308.1,
+      per: 4332.6,
+      code: '617 Patroclus',
+      kind: '特洛伊双星',
+      source: 'https://science.nasa.gov/mission/lucy/',
+      summary: '位于木星后方 60° 的 L5 特洛伊营，与尺寸相近的伴星墨诺提俄斯组成几乎等大的原始暗红冰岩双星，是露西号核心目标。',
+      lagrangeDeg: -60,
+      prominent: true,
+    },
+
+    // ── Centaurs (Between Jupiter, Saturn, Uranus & Neptune, 5.5–30 AU) ──
+    Chiron: {
+      a: 13.65,
+      e: 0.379,
+      i: 6.93,
+      om: 209.2,
+      w: 339.6,
+      per: 18426.0,
+      code: '2060 Chiron · 95P',
+      kind: '半人马天体',
+      source: sbdb + '2060',
+      summary: '运行在土星与天王星轨道之间的首颗半人马天体，同时具有彗星编号 95P。韦布望远镜检出其表面的水冰、甲烷与二氧化碳，恒星掩星还揭示了演化中的环盘与微弱彗发。',
+      prominent: true,
+    },
+    Chariklo: {
+      a: 15.78,
+      e: 0.172,
+      i: 23.38,
+      om: 300.4,
+      w: 242.1,
+      per: 22960.0,
+      code: '10199 Chariklo',
+      kind: '环带半人马天体',
+      source: sbdb + '10199',
+      summary: '土星与天王星之间已知最大的半人马天体，也是太阳系首颗被证实拥有致密双冰环的小天体（奥亚波克环与舒伊环），韦布望远镜在环中确认了结晶水冰。',
+      prominent: true,
+    },
+    Pholus: {
+      a: 20.32,
+      e: 0.572,
+      i: 24.69,
+      om: 119.4,
+      w: 354.8,
+      per: 33450.0,
+      code: '5145 Pholus',
+      kind: '半人马天体',
+      source: sbdb + '5145',
+      summary: '穿梭于巨行星轨道间的极红半人马天体，表面覆盖受长期辐射演化的有机托林与甲醇冰，色泽深红。',
+    },
+
+    // ── Kuiper Belt (Beyond Neptune, 30–50 AU) ──
+    Pluto: {
+      a: 39.48,
+      e: 0.249,
+      i: 17.14,
+      om: 110.3,
+      w: 113.8,
+      per: 90560.0,
+      code: '134340 Pluto',
+      kind: '矮行星',
+      source: 'https://science.nasa.gov/dwarf-planets/pluto/',
+      summary: '柯伊伯带代表性矮行星。新视野号飞掠揭示了心形的汤博区氮冰平原、克苏鲁暗红赤道带、稀薄蓝霾大气与五颗卫星。',
+      prominent: true,
+    },
+    Orcus: {
+      a: 39.42,
+      e: 0.22,
+      i: 20.58,
+      om: 268.7,
+      w: 72.6,
+      per: 90400.0,
+      code: '90482 Orcus',
+      kind: '矮行星候选',
+      source: sbdb + '90482',
+      summary: '与海王星呈 3:2 共振且相位常与冥王星相反，被称为“反冥王星”。光谱显示其覆盖明亮的结晶水冰与氨水合物，伴有一颗暗红色的大卫星亡卫一。',
+      prominent: true,
+    },
+    Haumea: {
+      a: 43.1,
+      e: 0.194,
+      i: 28.2,
+      om: 122.0,
+      w: 241.0,
+      per: 103000.0,
+      code: '136108 Haumea',
+      kind: '矮行星',
+      source: 'https://science.nasa.gov/dwarf-planets/haumea/',
+      summary: '仅约 3.9 小时极速自转的柯伊伯带矮行星，因离心力被拉成三轴椭球体，拥有纯净结晶水冰表层、暗红斑、细窄光环与两颗卫星。',
+      prominent: true,
+    },
+    Quaoar: {
+      a: 43.69,
+      e: 0.041,
+      i: 7.99,
+      om: 188.9,
+      w: 151.3,
+      per: 105480.0,
+      code: '50000 Quaoar',
+      kind: '矮行星',
+      source: sbdb + '50000',
+      summary: '经典柯伊伯带大型矮行星。2023 年掩星与 CHEOPS 望远镜震撼发现它在远超洛希极限处拥有两条致密冰环，外侧还运行着卫星创卫一。',
+      prominent: true,
+    },
+    Arrokoth: {
+      a: 44.58,
+      e: 0.042,
+      i: 2.45,
+      om: 159.0,
+      w: 174.4,
+      per: 108700.0,
+      code: '486958 Arrokoth',
+      kind: '柯伊伯带天体',
+      source: 'https://science.nasa.gov/solar-system/kuiper-belt/arrokoth/',
+      summary: '新视野号 2019 年近距离飞掠的人类探测最远天体，呈扁平雪人状双瓣相接结构，表面深砖红、颈部环绕明亮细粒物质带，大倾角约 98°。',
+    },
+    Makemake: {
+      a: 45.6,
+      e: 0.159,
+      i: 29.0,
+      om: 79.3,
+      w: 297.0,
+      per: 112000.0,
+      code: '136472 Makemake',
+      kind: '矮行星',
+      source: 'https://science.nasa.gov/dwarf-planets/makemake/',
+      summary: '柯伊伯带第二亮天体，表面富含冻结甲烷、乙烷与偏红的托林物质，哈勃为其发现了一颗暗弱卫星 MK 2。',
+      prominent: true,
+    },
+
+    // ── Scattered Disc & Detached / Inner Oort Zone (50–1000+ AU, Far Beyond Pluto!) ──
+    Gonggong: {
+      a: 67.48,
+      e: 0.503,
+      i: 30.74,
+      om: 336.9,
+      w: 207.7,
+      per: 202500.0,
+      code: '225088 Gonggong',
+      kind: '矮行星',
+      source: sbdb + '225088',
+      summary: '海王星 3:10 共振的离散盘大型矮行星，以中国古代水神共工命名，是太阳系颜色最赤红的大型天体之一，拥有哈勃发现的卫星相柳（共卫一）。',
+      prominent: true,
+    },
+    Eris: {
+      a: 67.86,
+      e: 0.438,
+      i: 43.9,
+      om: 36.0,
+      w: 151.0,
+      per: 205000.0,
+      code: '136199 Eris',
+      kind: '矮行星',
+      source: 'https://science.nasa.gov/dwarf-planets/eris/',
+      summary: '已知质量最大的矮行星，沿 43.9° 极高倾角轨道深入离散盘，表面覆有高反照率氮冰与甲烷霜层，伴有大型卫星迪丝诺美亚（阋卫一）。',
+      prominent: true,
+    },
+    Farfarout: {
+      a: 80.2,
+      e: 0.655,
+      i: 18.3,
+      om: 68.4,
+      w: 241.9,
+      per: 262000.0,
+      code: '2018 AG37 · Farfarout',
+      kind: '极远离散天体',
+      source: sbdb + '2018%20AG37',
+      summary: '目前观测距离太阳最远的已知太阳系天体（观测距离约 132 天文单位），高偏心率轨道从海王星外缘一路摆荡至极远离散盘深处。',
+      prominent: true,
+    },
+    VP113: {
+      a: 266.0,
+      e: 0.698,
+      i: 24.05,
+      om: 90.8,
+      w: 293.8,
+      per: 1586000.0,
+      code: '2012 VP113',
+      kind: '分离矮行星',
+      source: sbdb + '2012%20VP113',
+      summary: '继赛德娜之后发现的第二颗类赛德娜分离天体，近日点高达 80.5 天文单位，彻底脱离海王星引力掌控，表面呈现淡粉红霜色。',
+      prominent: true,
+    },
+    Sedna: {
+      a: 506.0,
+      e: 0.85,
+      i: 11.93,
+      om: 144.4,
+      w: 311.3,
+      per: 4160000.0,
+      code: '90377 Sedna',
+      kind: '内奥尔特云矮行星',
+      source: 'https://science.nasa.gov/solar-system/kuiper-belt/sedna/',
+      summary: '极遥远的内奥尔特云矮行星，轨道近日点 76 AU、远日点直达 937 AU，公转一周逾 1.1 万年；表面经宇宙射线长年辐照呈深赤红色，韦布检出乙烷与乙炔等有机冰。',
+      prominent: true,
+    },
   }
-  const smallBodies = (
-    [
-      ['Pluto', '冥王星', 'outer', 1.2, 72],
-      ['Haumea', '妊神星', 'outer', 0.89, 190],
-      ['Makemake', '鸟神星', 'outer', 0.84, 318],
-      ['Eris', '阋神星', 'outer', 1.15, 235],
-      ['Ceres', '谷神星', 'main', 0.8, 138],
-      ['Vesta', '灶神星', 'main', 0.58, 45],
-      ['Pallas', '智神星', 'main', 0.55, 250],
-      ['Juno', '婚神星', 'main', 0.39, 320],
-      ['Hygiea', '健神星', 'main', 0.47, 100],
-    ] as const
-  ).map(([id, name, region, r, phase]) => {
-    const o = smallOrbits[id],
-      outer = region === 'outer',
-      slope = outer ? 2.15 : 6.25
-    const a = outer
-      ? outerBand.inner + (o.a - 30.07) * slope
-      : bandMid(mainBand) + (o.a - 2.77) * slope
-    const extent = systemRadius(id, r),
-      band = outer ? outerBand : mainBand
-    const maxExcursion = outer
-      ? a - band.inner - extent
-      : Math.min(a - band.inner, band.outer - a) - extent
-    const e = Math.min(o.e * o.a * slope, Math.max(0, maxExcursion)) / a
+
+  const smallSpecs: readonly [string, string, Belt, number, number][] = [
+    // Main Belt
+    ['Ceres', '谷神星', 'main', 0.82, 138],
+    ['Vesta', '灶神星', 'main', 0.6, 45],
+    ['Pallas', '智神星', 'main', 0.56, 250],
+    ['Juno', '婚神星', 'main', 0.42, 320],
+    ['Hygiea', '健神星', 'main', 0.5, 100],
+    ['Psyche', '灵神星', 'main', 0.52, 204],
+    // Jupiter Trojans (phase computed dynamically from Jupiter L4/L5!)
+    ['Eurybates', '欧律巴忒斯', 'trojan', 0.44, 0],
+    ['Patroclus', '帕特罗克洛斯', 'trojan', 0.5, 0],
+    // Centaurs (Saturn ↔ Uranus ↔ Neptune!)
+    ['Chiron', '凯龙星', 'centaur', 0.58, 128],
+    ['Chariklo', '女凯龙星', 'centaur', 0.62, 294],
+    ['Pholus', '福罗斯星', 'centaur', 0.48, 42],
+    // Kuiper Belt (30–50 AU)
+    ['Pluto', '冥王星', 'outer', 1.24, 72],
+    ['Orcus', '亡神星', 'outer', 0.94, 293],
+    ['Haumea', '妊神星', 'outer', 0.92, 190],
+    ['Quaoar', '创神星', 'outer', 0.98, 159],
+    ['Arrokoth', '阿罗科斯', 'outer', 0.56, 318],
+    ['Makemake', '鸟神星', 'outer', 0.88, 318],
+    // Scattered Disc & Detached / Inner Oort Zone (50–1000+ AU)
+    ['Gonggong', '共工星', 'scattered', 1.06, 122],
+    ['Eris', '阋神星', 'scattered', 1.2, 235],
+    ['Farfarout', '远极星', 'scattered', 0.72, 243],
+    ['VP113', '2012 VP113', 'scattered', 0.78, 211],
+    ['Sedna', '赛德娜', 'scattered', 1.04, 224],
+  ]
+
+  const mainSlope = (mainBand.outer - mainBand.inner) / 1.45
+  const jupiterInitLonDeg = 338
+
+  const smallBodies = smallSpecs.map(([id, name, region, r, rawPhase]) => {
+    const o = smallOrbits[id]
+    const extent = systemRadius(id, r)
+    const periAU = o.a * (1 - o.e)
+    const apoAU = o.a * (1 + o.e)
+
+    let a: number
+    let e: number
+    let phaseDeg = rawPhase
+
+    if (region === 'main') {
+      a = bandMid(mainBand) + (o.a - 2.77) * mainSlope
+      const maxExcursion = Math.min(a - mainBand.inner, mainBand.outer - a) - extent
+      e = Math.min(o.e * o.a * mainSlope, Math.max(0, maxExcursion)) / a
+    } else if (region === 'trojan') {
+      // Exact 1:1 co-orbital resonance locked to Jupiter's L4 (+60°) / L5 (-60°) camps
+      a = jupiter.a
+      e = Math.min(o.e * 0.45, 0.045)
+      phaseDeg = ((jupiterInitLonDeg + (o.lagrangeDeg ?? 60) - o.w) % 360 + 360) % 360
+    } else if (region === 'centaur') {
+      const corridor = o.a < 19 ? centaurBands.satUra : centaurBands.uraNep
+      const t = o.a < 19 ? (o.a - 11.5) / 6.5 : (o.a - 19.2) / 5.5
+      a = corridor.inner + extent + 1.2 + Math.max(0.15, Math.min(0.85, t)) * Math.max(1, corridor.outer - corridor.inner - 2 * extent - 2.4)
+      const maxExcursion = Math.min(a - corridor.inner, corridor.outer - a) - extent
+      e = Math.min(o.e * 0.28, Math.max(0, maxExcursion) / a)
+    } else {
+      // Kuiper Belt, Scattered Disc, Detached / Inner Oort Zone: continuous linear-to-log AU mapping
+      const minPeriScene = outerBand.inner + extent + 1.0
+      const periScene = Math.max(minPeriScene, mapOuterAU(Math.max(30.5, periAU)))
+      const apoScene = Math.max(periScene + 1.5, mapOuterAU(apoAU))
+      a = (periScene + apoScene) * 0.5
+      e = (apoScene - periScene) / (apoScene + periScene)
+    }
+
     const world = new World(
       {
         id,
         name,
         region,
         r,
-        phase: phase * rad,
+        phase: phaseDeg * rad,
         a,
         e,
         inc: o.i,
         node: o.om,
         peri: o.w,
         au: o.a,
+        periAU,
+        apoAU,
         days: o.per,
-        kind: outer || id === 'Ceres' ? '矮行星' : '小行星',
-        source:
-          outer || id === 'Ceres'
-            ? 'https://science.nasa.gov/dwarf-planets/' + id.toLowerCase() + '/'
-            : 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=' + id,
+        kind: o.kind,
+        code: o.code,
+        summary: o.summary,
+        source: o.source,
+        prominent: o.prominent,
       },
       catalog[id] || [],
     )
     world.extent = extent
     return world
   })
+
   const worlds = [...planets, ...smallBodies]
-  return { planets, smallBodies, worlds, mainBand, outerBand, bandMid }
+  return {
+    planets,
+    smallBodies,
+    worlds,
+    mainBand,
+    hildaBand,
+    centaurBands,
+    outerBand,
+    scatteredBand,
+    oortBand,
+    bandMid,
+  }
 }
+
 const moonAliases: Record<string, string[]> = {
   Moon: ['月球', '月亮', '太阴', 'Luna'],
   Io: ['伊奥', '艾奥', '伊娥'],
@@ -170,7 +597,13 @@ const moonAliases: Record<string, string[]> = {
   Namaka: ['纳马卡'],
   Dysnomia: ['迪丝诺美亚', '阋卫一'],
   'MK 2': ['MK 2', '鸟卫一', 'MK2'],
+  Queta: ['奎塔', 'S/2018 (3548) 1'],
+  Menoetius: ['墨诺提俄斯', '梅诺提俄斯'],
+  Vanth: ['亡卫一', '万斯'],
+  Weywot: ['创卫一', '维沃特'],
+  Xiangliu: ['相柳', '共卫一'],
 }
+
 function chineseNumber(n: number): string {
   const digits = '零一二三四五六七八九'
   if (n < 10) return digits[n]
@@ -182,6 +615,7 @@ function chineseNumber(n: number): string {
     (n % 100 ? (n % 100 < 10 ? '零' : n % 100 < 20 ? '一' : '') + chineseNumber(n % 100) : '')
   )
 }
+
 export function assignMoonNames(p: World, m: Moon) {
   const values: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500 }
   const n = [...(m.num || '')].reduce(
@@ -195,6 +629,9 @@ export function assignMoonNames(p: World, m: Moon) {
     Uranus: '天',
     Neptune: '海',
     Pluto: '冥',
+    Orcus: '亡',
+    Quaoar: '创',
+    Gonggong: '共',
     Eris: '阋',
     Haumea: '妊',
   }

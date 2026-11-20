@@ -16,6 +16,11 @@ const canvasRims: Record<string, [number, number, number]> = {
   Titan: [138, 86, 36],
   Triton: [82, 108, 134],
   Enceladus: [92, 128, 156],
+  Chiron: [78, 124, 158],
+  Orcus: [84, 118, 148],
+  Eris: [94, 124, 156],
+  Gonggong: [118, 68, 60],
+  Sedna: [126, 62, 48],
 }
 function sample(map: ImageData, u: number, v: number) {
   const x = Math.floor((u - Math.floor(u)) * map.width)
