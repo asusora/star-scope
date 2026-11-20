@@ -1,0 +1,283 @@
+import { archivePhotos, thumbs } from './assets'
+import type { ArchiveEntry, World } from '../scene/types'
+export const jplFacts = 'https://ssd.jpl.nasa.gov/sats/elem/'
+export const moonSources: Record<string, string> = {
+  Makemake: 'https://arxiv.org/abs/2509.05880',
+  Haumea: 'https://doi.org/10.1088/0004-6256/137/6/4766',
+  Eris: 'https://arxiv.org/abs/2009.13733',
+}
+export function normalized(s: string) {
+  return String(s)
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[\u0300-\u036f\s/'’ʻ()_-]/g, '')
+}
+export function createArchive(worlds: World[]): ArchiveEntry[] {
+  const messierBase =
+    'https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-'
+  const catalogEntries: ArchiveEntry[] = [
+    {
+      id: 'm31',
+      title: '仙女座星系',
+      code: 'M31 · NGC 224',
+      alt: 'Andromeda Galaxy',
+      distance: '约 250 万光年',
+      place: '仙女座',
+      body: '与银河系同属本星系群。星盘相对我们大幅倾斜，从地球看去呈细长的椭圆形。照片是哈勃拼接的部分星盘。',
+      credit: 'NASA、ESA、PHAT 团队、J. Dalcanton、B. F. Williams、L. C. Johnson 与 R. Gendler',
+    },
+    {
+      id: 'm33',
+      title: '三角座星系',
+      code: 'M33 · NGC 598',
+      alt: 'Triangulum Galaxy',
+      distance: '约 300 万光年',
+      place: '三角座',
+      body: '本星系群的另一个旋涡星系。沿旋臂可以看到密集的年轻恒星和形成恒星的区域。',
+      credit: 'NASA、ESA、M. Durbin、J. Dalcanton 与 B. F. Williams',
+    },
+    {
+      id: 'm51',
+      title: '涡状星系',
+      code: 'M51 · NGC 5194',
+      alt: 'Whirlpool Galaxy',
+      distance: '约 3100 万光年',
+      place: '猎犬座',
+      body: '从地球看过去，它几乎正面朝向我们。两条明亮旋臂向外延伸，旁边可见与之相互作用的伴星系。',
+      credit: 'NASA、ESA、S. Beckwith 与 Hubble Heritage Team（STScI/AURA）',
+    },
+    {
+      id: 'm104',
+      title: '草帽星系',
+      code: 'M104 · NGC 4594',
+      alt: 'Sombrero Galaxy 宽边帽星系',
+      distance: '约 2800 万光年',
+      place: '室女座',
+      body: '接近侧向的视角让深色尘埃带横贯明亮的中央核球，形成了像宽檐帽一样的轮廓。',
+      credit: 'NASA 与 Hubble Heritage Team（STScI/AURA）',
+    },
+    {
+      id: 'm82',
+      title: '雪茄星系',
+      code: 'M82 · NGC 3034',
+      alt: 'Cigar Galaxy',
+      distance: '约 1200 万光年',
+      place: '大熊座',
+      body: '沿侧面看去，M82 的星盘细长如雪茄。中心区域正大量形成恒星，红色气体从星盘向外延伸。',
+      credit:
+        'NASA、ESA、Hubble Heritage Team（STScI/AURA）；致谢 J. Gallagher、M. Mountain、P. Puxley',
+    },
+    {
+      id: 'm87',
+      title: '室女座 A',
+      code: 'M87 · NGC 4486',
+      alt: 'Virgo A 室女A 室女座A星系 M87星系',
+      distance: '约 5400 万光年',
+      place: '室女座',
+      body: '这座巨椭圆星系的中心有一颗超大质量黑洞。一束高速物质从核心喷出，在哈勃影像中显出蓝色。',
+      credit: 'NASA、ESA、Hubble Heritage Team（STScI/AURA）；致谢 P. Côté、E. Baltz',
+    },
+  ].map((e) => ({
+    ...e,
+    group: '河外星系' as const,
+    photo: archivePhotos[e.id],
+    caption: '哈勃望远镜观测影像',
+    facts: [
+      ['距离', e.distance],
+      ['星座', e.place],
+    ],
+    source: messierBase + e.id.slice(1) + '/',
+  }))
+  for (const e of [
+    {
+      id: 'sirius',
+      title: '天狼星',
+      code: 'Sirius · α Canis Majoris',
+      alt: '大犬座α Sirius A Sirius B',
+      distance: '约 8.6 光年',
+      place: '大犬座',
+      type: '双星系统',
+      body: '明亮的天狼星 A 与暗弱的白矮星天狼星 B 约每 50 年互绕一周。哈勃影像中，主星的光芒几乎淹没了伴星。',
+      caption: '哈勃望远镜观测影像',
+      credit: 'NASA、ESA、H. Bond（STScI）、M. Barstow（University of Leicester）',
+      source: 'https://esahubble.org/images/heic0516a/',
+    },
+    {
+      id: 'betelgeuse',
+      title: '参宿四',
+      code: 'Betelgeuse · α Orionis',
+      alt: '猎户座α',
+      distance: '约 600 光年',
+      place: '猎户座',
+      type: '红超巨星',
+      body: '参宿四位于猎户座的肩部。ALMA 在毫米波波段分辨出了它延展的大气层，盘面上一块区域比周围更亮。',
+      caption: 'ALMA 毫米波观测影像',
+      credit: 'ALMA（ESO/NAOJ/NRAO）/ E. O’Gorman / P. Kervella',
+      source: 'https://www.eso.org/public/images/potw1726a/',
+    },
+    {
+      id: 'vega',
+      title: '织女星',
+      code: 'Vega · α Lyrae',
+      alt: '天琴座α 织女一',
+      distance: '约 25 光年',
+      place: '天琴座',
+      type: '主序星',
+      body: '织女星周围有一片近乎正面朝向我们的尘埃盘。韦布在中红外波段记录了暖尘的辐射，揭示出盘内平滑的结构。',
+      caption: '织女星周围的尘埃盘 · 韦伯中红外观测',
+      credit: 'NASA、ESA、CSA、STScI、K. Su、A. Gáspár（University of Arizona）',
+      source: 'https://science.nasa.gov/asset/hubble/vega-webb-compass-image/',
+    },
+    {
+      id: 'proxima',
+      title: '比邻星',
+      code: 'Proxima Centauri · α Centauri C',
+      alt: '半人马座α星C 毗邻星',
+      distance: '约 4.2 光年',
+      place: '半人马座',
+      type: '红矮星',
+      body: '这是离太阳最近的恒星。它本身十分暗弱，肉眼难以看见，偶尔却会因耀斑而增亮。「比邻星 b」是绕它运行的行星。',
+      caption: '哈勃望远镜观测影像',
+      credit: 'ESA/Hubble 与 NASA',
+      source: 'https://esahubble.org/images/potw1343a/',
+    },
+  ]) {
+    catalogEntries.push({
+      ...e,
+      group: '恒星',
+      photo: archivePhotos[e.id],
+      facts: [
+        ['类型', e.type],
+        ['距离', e.distance],
+        ['星座', e.place],
+      ],
+    })
+  }
+  for (const [id, title, code, days, year, type, body] of [
+    [
+      'proxima-centauri-b',
+      '比邻星 b',
+      'Proxima Centauri b',
+      '11.2 天',
+      '2016',
+      '超级地球',
+      '环绕比邻星这颗红矮星运行。它在大约十一个地球日内就绕恒星一周。',
+    ],
+    [
+      'trappist-1-e',
+      'TRAPPIST-1 e',
+      'TRAPPIST-1 e',
+      '6.1 天',
+      '2017',
+      '类地行星',
+      '它是 TRAPPIST-1 多行星系统的一员，绕一颗低温的 M 型恒星运行。',
+    ],
+    [
+      '51-pegasi-b',
+      '飞马座 51 b',
+      '51 Pegasi b',
+      '4.2 天',
+      '1995',
+      '气态巨行星',
+      '这颗热木星非常靠近母恒星，轨道半长轴约 0.052 个天文单位。',
+    ],
+    [
+      '55-cancri-e',
+      '巨蟹座 55 e',
+      '55 Cancri e · Janssen',
+      '约 0.7 天',
+      '2004',
+      '超级地球',
+      '它紧贴母恒星运行，公转一周不到一个地球日。',
+    ],
+    [
+      'kepler-452-b',
+      '开普勒-452 b',
+      'Kepler-452 b',
+      '384.8 天',
+      '2015',
+      '超级地球',
+      '它绕一颗 G 型恒星运行，一年比地球长约 20 天。它与母恒星的轨道距离约为日地距离的 1.05 倍。',
+    ],
+    [
+      'hd-209458-b',
+      '奥西里斯',
+      'HD 209458 b · Osiris',
+      '约 3.5 天',
+      '1999',
+      '气态巨行星',
+      '它是一颗紧靠母恒星的热木星。「奥西里斯」是它的非正式昵称。行星从恒星前方经过时，星光穿过其大气，为研究大气成分提供了线索。',
+    ],
+  ]) {
+    const artwork =
+      id === 'hd-209458-b'
+        ? {
+            credit: 'NASA、ESA、G. Bacon（STScI）',
+            imageSource: 'https://esahubble.org/images/opo1436a/',
+          }
+        : { credit: 'NASA 系外行星目录' }
+    catalogEntries.push({
+      id,
+      title,
+      code,
+      group: '系外行星',
+      photo: archivePhotos[id],
+      caption: '艺术想象图',
+      ...artwork,
+      body,
+      facts: [
+        ['类型', type],
+        ['公转周期', days],
+        ['发现年份', year],
+      ],
+      source: 'https://science.nasa.gov/exoplanet-catalog/' + id + '/',
+    })
+  }
+  for (const p of worlds) {
+    catalogEntries.push({
+      id: p.id,
+      title: p.name,
+      code: p.id,
+      group: '太阳系',
+      photo: thumbs[p.id],
+      caption: '场景模型',
+      object: p,
+      facts: [
+        ['类别', p.kind || '行星'],
+        ['卫星数', String(p.moons.length)],
+        ['公转周期', (p.days / 365.25).toFixed(2) + ' 年'],
+      ],
+      body:
+        p.region === 'main'
+          ? '位于火星和木星之间的主小行星带。'
+          : p.region === 'outer'
+            ? '轨道延伸至海王星之外，可在外太阳系视图中沿轨道跟随观察。'
+            : '从三维场景靠近这颗行星，可以跟随它公转并查看卫星目录。',
+      source: p.source || 'https://science.nasa.gov/' + p.id.toLowerCase() + '/',
+    })
+    for (const m of p.moons) {
+      catalogEntries.push({
+        id: p.id + '-' + m.name,
+        title: m.label,
+        code: [...new Set([m.numberName, m.name].filter((s) => s && s !== m.label))].join(' · '),
+        group: '太阳系',
+        moon: m,
+        object: p,
+        keys: m.searchNames,
+        featured: m.featured,
+        body: m.otherNames.length
+          ? '也可以用' + m.otherNames.join('、') + '查找这颗卫星。'
+          : m.name + ' 环绕' + p.name + '运行。',
+        facts: [
+          ['母天体', p.name],
+          [m.estimate ? '观测距离' : '轨道半长轴', m.a.toLocaleString('zh-CN') + ' km'],
+          ['公转周期', m.period ? m.period + ' 天' : '未列出'],
+        ],
+        source:
+          moonSources[p.id] ||
+          (m.estimate ? 'https://tamkin3.eps.harvard.edu/iauc/09000/09091.html' : jplFacts),
+      })
+    }
+  }
+  return catalogEntries
+}
