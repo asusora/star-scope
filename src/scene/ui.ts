@@ -1,12 +1,56 @@
 import { shallowReactive } from 'vue'
 import type { SceneUI } from './types'
 import { pick } from '../i18n'
+import { VOYAGER_END_YEAR, formatMissionDate } from '../data/voyager'
 
 export function createSceneUI() {
   return shallowReactive<SceneUI>({
     title: pick('太阳系', 'Solar System'),
     landing: null,
     galaxy: false,
+    voyager: false,
+    phenomena: false,
+    phenomenonId: 'alignment1982',
+    phenomenonYear: 1981.3,
+    phenomenonView: 'top',
+    phenomenonMilestone: 'converge',
+    phenomenonStats: {
+      year: 1981.3,
+      dateLabel: '1981.04.15',
+      inPeakWindow: false,
+      windowHint: '',
+      metrics: [
+        { label: '', value: '—', sub: '' },
+        { label: '', value: '—', sub: '' },
+        { label: '', value: '—', sub: '' },
+        { label: '', value: '—', sub: '' },
+      ],
+    },
+    comet: null,
+    cometDistanceAU: 0,
+    cometSpeedKmS: 0,
+    cometActivity: 0,
+    cometInbound: false,
+    showComets: true,
+    cometOrbits: false,
+    voyagerOverlay: false,
+    voyagerMode: 'v1',
+    voyagerFocus: 'v1',
+    voyagerPeerStats: null,
+    voyagerYear: VOYAGER_END_YEAR,
+    voyagerView: 'overview',
+    voyagerMilestone: 'oneLightDay',
+    voyagerStats: {
+      year: VOYAGER_END_YEAR,
+      dateLabel: formatMissionDate(VOYAGER_END_YEAR),
+      sunAU: 172.27,
+      earthAU: 173.14,
+      earthBillionKm: 25.9,
+      lightHours: 24.0,
+      speedKmS: 16.9,
+      latDeg: 34.94,
+      lonDeg: 255.11,
+    },
     planet: null,
     moon: null,
     region: null,

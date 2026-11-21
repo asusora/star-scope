@@ -41,3 +41,10 @@ function orbitalPosition(o: Orbit, M: number, out: T.Vector3) {
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
 export type Orbit = ReturnType<typeof orbit>
 export { tau, rad, v3, seeded, orbit, orbitPoint, orbitalPosition, clamp }
+
+// J2000 equatorial coordinates to the ecliptic, Y-up scene used by the galaxy markers.
+const equatorialToWorld = new T.Quaternion().setFromAxisAngle(v3(1, 0, 0), -23.4392911 * rad)
+export function skyDirection(ra: number, dec: number) {
+  const ring = Math.cos(dec * rad)
+  return v3(ring * Math.cos(ra * rad), Math.sin(dec * rad), -ring * Math.sin(ra * rad)).applyQuaternion(equatorialToWorld)
+}

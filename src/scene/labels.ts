@@ -10,11 +10,40 @@ export function createLabels(tags: HTMLElement) {
   const shownLabels = new Set<HTMLElement>()
   const measure = document.createElement('canvas').getContext('2d')!
   const labelMetrics = new Map<string, { width: number; hitWidth: number }>()
-  function placeLabels(markers: Label[], width: number, height: number) {
+  let cachedAvoidEl: HTMLElement | null = null
+  let cachedAvoidW = 0
+  let cachedAvoidH = 0
+  let cachedAvoidAt = 0
+  let cachedAvoidRect: { left: number; top: number; right: number; bottom: number } | null = null
+  function placeLabels(markers: Label[], width: number, height: number, avoid: HTMLElement | null = null) {
     const used: { x: number; y: number; w: number }[] = [],
       visible = new Set<HTMLElement>()
+    let avoidBox: { left: number; top: number; right: number; bottom: number } | null = null
+    if (avoid) {
+      const now = performance.now()
+      if (
+        avoid !== cachedAvoidEl ||
+        width !== cachedAvoidW ||
+        height !== cachedAvoidH ||
+        now - cachedAvoidAt > 250
+      ) {
+        const box = avoid.getBoundingClientRect()
+        const origin = tags.getBoundingClientRect()
+        cachedAvoidRect = {
+          left: box.left - origin.left - 5,
+          top: box.top - origin.top - 5,
+          right: box.right - origin.left + 5,
+          bottom: box.bottom - origin.top + 5,
+        }
+        cachedAvoidEl = avoid
+        cachedAvoidW = width
+        cachedAvoidH = height
+        cachedAvoidAt = now
+      }
+      avoidBox = cachedAvoidRect
+    }
     for (const { el, q, r, left } of markers) {
-      if (r > width * 0.55) continue
+      if (visible.has(el) || r > width * 0.55) continue
       const key = (width < 530 ? 's:' : 'l:') + el.textContent
       if (!labelMetrics.has(key)) {
         const style = getComputedStyle(el)
@@ -25,12 +54,14 @@ export function createLabels(tags: HTMLElement) {
         labelMetrics.set(key, { width, hitWidth: el.offsetWidth })
       }
       const { width: len, hitWidth } = labelMetrics.get(key)!
-      const x = left ? q.x - r - 7 - len : q.x + r + 7,
+      const x = left ? q.x - r - 7 - hitWidth : q.x + r + 7,
         y = q.y - 8
       if (x < 3 || x + len > width - 3 || y < 3 || y > height - 19) continue
-      // Avoid drifting underneath the fixed top-left HUD brand card or top-right toolbar
+      // Avoid drifting underneath the fixed top-left HUD brand card, top-right toolbar, or bottom-left mission HUD
       if (width > 680 && x < 360 && y < 116) continue
       if (width > 680 && x + len > width - 390 && y < 60) continue
+      if (avoidBox && x < avoidBox.right && x + len > avoidBox.left && y + 16 > avoidBox.top && y < avoidBox.bottom)
+        continue
       // A label keeps its anchor. Yield space to the higher-priority label
       // and require extra clearance before fading back in.
       const gap = shownLabels.has(el) ? 2 : 8
@@ -40,6 +71,10 @@ export function createLabels(tags: HTMLElement) {
         continue
       used.push({ x, y, w: len })
       visible.add(el)
+      if (el.classList.contains('comet-name')) {
+        el.classList.toggle('anchor-right', !!left)
+        el.style.setProperty('--leader', r + 'px')
+      }
       placeText(el, x, y, hitWidth)
       if (!shownLabels.has(el)) el.classList.add('visible')
     }

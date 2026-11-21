@@ -30,7 +30,8 @@ defineExpose({ open: () => dialog.value?.showModal() })
         target.
       </p>
       <p>
-        Switch between the Solar System, TRAPPIST-1 and the Milky Way at top right.
+        Switch between the Solar System, Rare Phenomena, Voyager, TRAPPIST-1 and the Milky Way at top right.
+        In Rare Phenomena, explore live epoch simulations of the 1982 Nine-Planet Alignment, 1994 Comet Shoemaker–Levy 9 Jupiter impacts, 2020 Great Conjunction, and 2017 interstellar visitor 1I/ʻOumuamua—click any year milestone to start real-time simulation and pause anytime to orbit and inspect in 3D.
         In TRAPPIST-1, select b through h to follow a planet and read its orbital parameters. Open “Notes” for curated
         astronomy commentary, and click scene pins to switch topics. Clicking the Solar System
         marker in the Milky Way zooms back to planetary orbits.
@@ -76,6 +77,13 @@ defineExpose({ open: () => dialog.value?.showModal() })
         470 known natural satellites. Sizes, orbital distances, and periods are logarithmically and
         piecewise scaled for clarity; moons can be searched by name, Roman numeral, or provisional
         designation.
+      </p>
+      <p>
+        Galaxy markers show the catalogue directions in the illustrative starfield. The three comets
+        follow paths derived from their JPL orbital elements. Playback uses compressed periods and
+        illustrative starting positions. Their tails grow as they approach the Sun.
+        <a href="https://simbad.cds.unistra.fr/simbad/" target="_blank" rel="noopener">SIMBAD galaxy positions ↗</a> ·
+        <a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html" target="_blank" rel="noopener">JPL comet orbits ↗</a>
       </p>
       <p>
         The six external galaxies reconstruct 3D luminous distributions from observed imagery, with
@@ -195,7 +203,7 @@ defineExpose({ open: () => dialog.value?.showModal() })
         加拖动平移。滚轮向指针所指的区域缩放；触屏上双指捏合缩放、双指同向拖动平移。复位键可回到当前目标。
       </p>
       <p>
-        从右上角切换太阳系、TRAPPIST-1 与银河系。在 TRAPPIST-1 全景中点选 b 至 h，可跟随对应行星并查看轨道参数。点“注释”查看当前视图的天文说明，点图中的标记可切换讲解。银河系中的太阳系标记可带你回到行星轨道。
+        从右上角切换太阳系、罕见天象、旅行者计划、TRAPPIST-1 与银河系。在「罕见天象」中可实时演算 1982 九星连珠、1994 彗星撞击木星（苏梅克-列维 9 号）、2020 土木大合与 2017 星际访客奥陌陌——点击任意年份节点即刻实时演算，并可随时暂停自由环绕观察。在 TRAPPIST-1 全景中点选 b 至 h，可跟随对应行星并查看轨道参数。点“注释”查看当前视图的天文说明，点图中的标记可切换讲解。银河系中的太阳系标记可带你回到行星轨道。
       </p>
       <p>
         展开「天体导航」并点选天体，即可进入它的三维视图。拖动环绕，滚动或双指缩放。星系可切换俯视、侧视；系外行星可切换特写和系统全景。「原图与资料」保留观测影像、艺术想象图与来源。
@@ -224,6 +232,11 @@ defineExpose({ open: () => dialog.value?.showModal() })
       </p>
       <p>
         收录八大行星、22 颗代表性矮行星与小天体（涵括主小行星带、木星特洛伊群、巨行星间的半人马小天体带、柯伊伯带、离散盘及内奥尔特云分离天体），以及这些天体的 470 颗已知天然卫星。天体大小、轨道间距及周期差异经科学分段/对数缩放以便同屏观察，卫星可按常用译名、英文名或编号检索。
+      </p>
+      <p>
+        星空背景为示意，星系标记按星表方位定位。哈雷、恩克和海尔–波普彗星沿 JPL 轨道根数确定的路径运动，越接近太阳，彗尾越明显。起始位置与播放周期按演示需要设置。
+        <a href="https://simbad.cds.unistra.fr/simbad/" target="_blank" rel="noopener">SIMBAD 星系坐标 ↗</a> ·
+        <a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html" target="_blank" rel="noopener">JPL 彗星轨道 ↗</a>
       </p>
       <p>
         六个河外星系根据观测影像的亮度与颜色建立三维发光分布，沿视线的深度和盘厚采用形态模型估计。仙女座星系的模型另用

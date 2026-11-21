@@ -583,6 +583,7 @@ export function createSolarSystem() {
     scatteredBand,
     oortBand,
     bandMid,
+    mapOuterAU,
   }
 }
 

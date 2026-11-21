@@ -1,8 +1,37 @@
+import type { Comet } from '../data/comets'
 import type * as T from 'three'
 import type { Orbit } from './math'
 
 export type Belt = 'main' | 'trojan' | 'centaur' | 'outer' | 'scattered'
 export type OrbitMode = 'smart' | 'all' | 'off'
+export type VoyagerId = 'v1' | 'v2'
+export type VoyagerMode = VoyagerId | 'both'
+export type VoyagerView = 'overview' | 'flyby' | 'climb' | 'top' | 'probe'
+export type PhenomenonId = 'alignment1982' | 'sl9_1994' | 'conjunction2020' | 'oumuamua2017'
+export interface PhenomenonMetric {
+  label: string
+  value: string
+  sub: string
+  highlight?: boolean
+}
+export interface PhenomenonStats {
+  year: number
+  dateLabel: string
+  inPeakWindow: boolean
+  windowHint: string
+  metrics: [PhenomenonMetric, PhenomenonMetric, PhenomenonMetric, PhenomenonMetric]
+}
+export interface VoyagerStats {
+  year: number
+  dateLabel: string
+  sunAU: number
+  earthAU: number
+  earthBillionKm: number
+  lightHours: number
+  speedKmS: number
+  latDeg: number
+  lonDeg: number
+}
 export type OrbitPath = T.Line<T.BufferGeometry, T.LineBasicMaterial>
 export interface MoonRecord {
   name: string
@@ -115,6 +144,8 @@ export interface ProbePhoto {
   source: string
 }
 export interface ArchiveEntry {
+  comet?: Comet
+  sky?: { ra: number; dec: number }
   id: string
   title: string
   code: string
@@ -172,6 +203,28 @@ export interface SceneUI {
   landing: SurfaceStatus | null
   title: string
   galaxy: boolean
+  voyager: boolean
+  phenomena: boolean
+  phenomenonId: PhenomenonId
+  phenomenonYear: number
+  phenomenonView: string
+  phenomenonMilestone: string
+  phenomenonStats: PhenomenonStats
+  comet: Comet | null
+  cometDistanceAU: number
+  cometSpeedKmS: number
+  cometActivity: number
+  cometInbound: boolean
+  showComets: boolean
+  cometOrbits: boolean
+  voyagerOverlay: boolean
+  voyagerMode: VoyagerMode
+  voyagerFocus: VoyagerId
+  voyagerPeerStats: VoyagerStats | null
+  voyagerYear: number
+  voyagerView: VoyagerView
+  voyagerMilestone: string
+  voyagerStats: VoyagerStats
   planet: World | null
   moon: Moon | null
   region: Belt | null

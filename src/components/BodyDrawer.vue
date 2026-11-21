@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Atlas } from '../scene/atlas'
 import type { ArchiveEntry, Moon, SceneUI, World } from '../scene/types'
 import { normalized } from '../data/archive'
+import { localizedEntry } from '../i18n/archiveLocale'
 import { formatNum, isEn, pick, regionDrawerTitle } from '../i18n'
 import {
   moonDiscovered,
@@ -20,6 +21,14 @@ const { ui, atlas, currentEntry } = defineProps<{
   currentEntry?: ArchiveEntry | null
 }>()
 const emit = defineEmits<{ openArchive: [entry: ArchiveEntry] }>()
+const cometFact = computed(() => currentEntry?.comet ? localizedEntry(currentEntry).facts[0] : null)
+const cometActivityLabel = computed(() => {
+  const a = ui.cometActivity
+  if (a >= 75) return pick('近日爆发', 'Peak Outgassing')
+  if (a >= 38) return pick('活跃喷发', 'Active Jets')
+  if (a >= 16) return pick('温和升华', 'Sublimating')
+  return pick('远日休眠', 'Quiescent')
+})
 const smallBodies = computed(() => atlas.smallBodies.filter((p) => p.region === ui.region))
 const moons = computed(() => {
   const q = normalized(ui.search)
@@ -66,8 +75,59 @@ const returnLabel = computed(() => {
 })
 </script>
 <template>
+  <section v-if="ui.comet && !ui.deepEntry && !ui.dockOpen && !ui.notesOpen" class="comet-motion" :aria-label="pick('跟随观测', 'Tracking view')">
+    <p v-if="cometFact" class="comet-fact">{{ cometFact[0] }} · {{ cometFact[1] }}</p>
+    <div class="comet-telemetry">
+      <span>{{ pick('模拟日距', 'Solar distance') }}</span>
+      <strong>{{ ui.cometDistanceAU.toFixed(2) }} AU</strong>
+    </div>
+    <div class="comet-telemetry">
+      <span>{{ pick('轨道速率', 'Orbital speed') }}</span>
+      <strong>{{ ui.cometSpeedKmS.toFixed(1) }} km/s</strong>
+    </div>
+    <div class="comet-telemetry">
+      <span>{{ pick('喷发活性', 'Outgassing') }} · {{ cometActivityLabel }}</span>
+      <span class="comet-activity-bar" aria-hidden="true">
+        <i :style="{ width: ui.cometActivity + '%' }" />
+      </span>
+    </div>
+    <div class="comet-controls">
+      <span class="comet-dir" :class="{ inbound: ui.cometInbound }">
+        {{ ui.cometInbound ? pick('接近太阳', 'Inbound') : pick('远离太阳', 'Outbound') }}
+      </span>
+      <span class="comet-btn-group">
+        <button type="button" id="cometPerihelion" @click="atlas.seekCometPerihelion()">
+          {{ pick('近日点', 'Perihelion') }}
+        </button>
+        <button type="button" id="cometPlayback" @click="atlas.setPlaying(!ui.playing)">
+          {{ ui.playing ? pick('暂停', 'Pause') : pick('播放', 'Play') }}
+        </button>
+      </span>
+    </div>
+  </section>
   <div class="stage-actions">
-    <button id="land" v-if="!ui.galaxy && !ui.deepEntry && !ui.region" @click="atlas.land()">
+    <span v-if="ui.comet && !ui.deepEntry" class="comet-tracking-title">{{ ui.title }}</span>
+    <button
+      v-if="!ui.galaxy && !ui.voyager && !ui.phenomena && !ui.deepEntry"
+      id="cometsToggle"
+      type="button"
+      :aria-pressed="ui.showComets"
+      @click="atlas.setShowComets(!ui.showComets)"
+    >
+      <span>{{ pick('彗星', 'Comets') }}</span>
+      <span class="orbit-toggle-state" aria-hidden="true">{{ ui.showComets ? pick('开', 'On') : pick('关', 'Off') }}</span>
+    </button>
+    <button
+      v-if="ui.showComets && !ui.galaxy && !ui.voyager && !ui.phenomena && !ui.deepEntry"
+      id="cometOrbitsToggle"
+      type="button"
+      :aria-pressed="ui.cometOrbits"
+      @click="atlas.setCometOrbits(!ui.cometOrbits)"
+    >
+      <span>{{ pick('彗星轨道', 'Comet Orbits') }}</span>
+      <span class="orbit-toggle-state" aria-hidden="true">{{ ui.cometOrbits ? pick('开', 'On') : pick('关', 'Off') }}</span>
+    </button>
+    <button id="land" v-if="!ui.galaxy && !ui.deepEntry && !ui.region && !ui.voyager && !ui.phenomena && !ui.comet" @click="atlas.land()">
       <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <path
           d="M7 2v7.2M4.3 6.7L7 9.4l2.7-2.7M2.6 11.6h8.8"
@@ -101,7 +161,7 @@ const returnLabel = computed(() => {
         <path d="M4.5 5.4h5M4.5 7.8h3.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
       </svg>
       <span>{{
-        currentEntry.probePhotos?.length
+        currentEntry.comet ? pick('科普资料', 'Comet Guide') : currentEntry.probePhotos?.length
           ? pick('实拍与资料', 'Photos & Info')
           : pick('天体资料', 'Profile')
       }}</span>
@@ -109,7 +169,7 @@ const returnLabel = computed(() => {
         {{ currentEntry.probePhotos.length }}
       </span>
     </button>
-    <button id="return" :hidden="!ui.deepEntry && !ui.planet && !ui.region" @click="atlas.goBack()">
+    <button id="return" :hidden="!ui.deepEntry && !ui.planet && !ui.region && !ui.voyager && !ui.phenomena && !ui.comet" @click="atlas.goBack()">
       <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <path
           d="M8.8 3.2L5 7l3.8 3.8"

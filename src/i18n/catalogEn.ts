@@ -400,6 +400,11 @@ export interface ProbePhotoEn {
 }
 
 export const probePhotoEn: Record<string, ProbePhotoEn> = {
+  'halley-giotto': {
+    title: 'Giotto’s flyby of Halley’s nucleus',
+    description: 'Bright jets emerge from the sunlit side of the dark, elongated nucleus.',
+    probe: 'ESA Giotto', date: 'March 1986',
+  },
   PIA10179: {
     title: 'MESSENGER First Flyby Overview of Mercury',
     description:

@@ -1,6 +1,8 @@
 import * as T from 'three'
 import { createMapSynthesizer } from './mapSynthesizer'
 import { assignMoonNames, declinations, featured, type createSolarSystem } from '../data/solar'
+import { epochTritonPosition } from '../data/voyagerNeptune'
+import { epochPlanetPosition, planetEphemeris, planetTrueLonRad } from '../data/voyager'
 import { pick } from '../i18n'
 import { worldName } from '../i18n/catalogEn'
 import { createAsteroidBelts } from './belts'
@@ -180,14 +182,19 @@ export function createSolarModels(
     focus: 0x67e4ff,
   }
   const planetDiscs = planets.map(() => v3(0, 0, -1))
-  function pathFor(orbits: Orbit[], color: number, steps = 144, host: World | null = null) {
+  function pathFor(
+    orbits: Orbit[], color: number, steps = 144, host: World | null = null,
+    mapRadius?: (au: number) => number,
+  ) {
     const vertices = new Float32Array(orbits.length * steps * 3),
       indices = [],
       point = v3()
     for (const [row, o] of orbits.entries()) {
       const start = row * steps
       for (let i = 0; i < steps; i++) {
-        orbitPoint(o, (tau * i) / steps, point).toArray(vertices, (start + i) * 3)
+        orbitPoint(o, (tau * i) / steps, point)
+        if (mapRadius) point.setLength(mapRadius(point.length()))
+        point.toArray(vertices, (start + i) * 3)
         if (orbits.length > 1) indices.push(start + i, start + ((i + 1) % steps))
       }
     }
@@ -924,6 +931,54 @@ export function createSolarModels(
     const nepLon = Math.atan2(-planets[7].pos.z, planets[7].pos.x)
     stepBelts(clock, jupLon, nepLon)
   }
+  function modelStepAtEpoch(
+    year: number,
+    spinClock: number,
+    trackedMoon: Moon | null = null,
+    syncJovianMoons = false,
+  ) {
+    sun.mesh.rotation.y = spinClock * 0.045
+    const daysFrom2000 = (year - 2000) * 365.25
+    const jupTrueLon = planetTrueLonRad('Jupiter', year)
+    for (const [index, p] of worlds.entries()) {
+      if (planetEphemeris[p.id]) {
+        epochPlanetPosition(p, year, p.pos)
+      } else if (p.region === 'trojan') {
+        const lagrange = p.id === 'Patroclus' ? -Math.PI / 3 : Math.PI / 3
+        orbitalPosition(p.orbit, jupTrueLon + lagrange - (p.node + (p.peri || 0)) * rad, p.pos)
+      } else {
+        orbitalPosition(p.orbit, p.phase + (daysFrom2000 / Math.max(1, p.days)) * tau, p.pos)
+      }
+      p.anchor.position.copy(p.pos)
+      p.moonTracks.position.copy(p.pos)
+      p.mesh.rotation.y = 1.15 + spinClock * spinRates[index]
+      if (p.clouds) {
+        p.clouds.rotation.y = 1.16 + spinClock * 0.158
+        const earthShift = (p.mesh.material as T.MeshPhongMaterial).userData.earthCloudShift as
+          | { value: number }
+          | undefined
+        if (earthShift) earthShift.value = (p.clouds.rotation.y - p.mesh.rotation.y) / tau
+      }
+      if (p.haze) p.haze.rotation.y = 1.15 + spinClock * 0.068
+    }
+    for (const m of majorMoons) {
+      if (m.name === 'Triton') {
+        epochTritonPosition(m, year, m.pos)
+        m.world.copy(m.pos).add(m.parent.pos)
+      } else if (syncJovianMoons && m.parent.id === 'Jupiter' && m.period) {
+        orbitalPosition(m.orbit, m.phase + (daysFrom2000 / Math.abs(m.period)) * tau, m.pos)
+        m.world.copy(m.pos).add(m.parent.pos)
+      } else updateMoonPosition(m, spinClock)
+      m.mesh!.position.copy(m.pos)
+      m.mesh!.rotation.y = tidallyLockedMoons.has(m.name)
+        ? Math.atan2(m.pos.z, -m.pos.x)
+        : spinClock * 0.1
+    }
+    if (trackedMoon?.instance !== undefined) updateMinorMoons(trackedMoon.parent, spinClock)
+    const jupLon = Math.atan2(-planets[4].pos.z, planets[4].pos.x)
+    const nepLon = Math.atan2(-planets[7].pos.z, planets[7].pos.x)
+    stepBelts(spinClock, jupLon, nepLon)
+  }
   function disposeSolarExtras() {
     midQueueDisposed = true
     synthesis.dispose()
@@ -963,6 +1018,7 @@ export function createSolarModels(
     planetDiscs,
     pathFor,
     modelStep,
+    modelStepAtEpoch,
     updateMinorMoons,
     updateVisibleMinorMoons,
     syncMinorInstance,

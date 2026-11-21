@@ -72,7 +72,7 @@ function listSubtitle(entry: ArchiveEntry) {
         : `${entry.object?.name ?? ''}卫星`
       : entry.object
         ? worldKind(entry.object)
-        : pick('行星', 'Planet')
+        : entry.comet ? pick('彗星', 'Comet') : pick('行星', 'Planet')
     const probeShort = view.probePhotos?.[0]?.probe.split(/[（(]/)[0]?.trim()
     return [scope, probeShort].filter(Boolean).join(' · ')
   }
@@ -84,6 +84,7 @@ function listSubtitle(entry: ArchiveEntry) {
 }
 const dialogTitle = computed(() => {
   if (!observing.value) return pick('星图档案', 'Astro Archive')
+  if (current.value?.comet) return pick('彗星科普资料', 'Comet Guide')
   if (group.value === '探测器实拍') return pick('探测器实拍档案', 'Spacecraft Imagery')
   const g = current.value?.group ?? (group.value === '全部' ? '太阳系' : group.value)
   return isEn.value ? `${groupLabel(g, 'en')} Archive` : g + '档案'
@@ -377,6 +378,9 @@ defineExpose({ open })
               ><a :href="current.source" target="_blank" rel="noopener">{{
                 pick('来源资料 ↗', 'Source ↗')
               }}</a>
+              <a v-if="current.comet" :href="'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=' + encodeURIComponent(current.comet.id)" target="_blank" rel="noopener">
+                {{ pick('JPL 轨道根数 ↗', 'JPL orbit elements ↗') }}
+              </a>
             </div>
           </div>
         </template>

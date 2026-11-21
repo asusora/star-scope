@@ -14,6 +14,13 @@ interface ProbePhotoSpec {
 const photojournal = (id: string) => `https://photojournal.jpl.nasa.gov/catalog/${id}`
 
 const rawProbePhotos: Record<string, ProbePhotoSpec[]> = {
+  '1P': [{
+    id: 'halley-giotto',
+    title: '乔托号飞掠哈雷彗核',
+    description: '明亮的喷流从彗核受太阳照射的一侧向外延伸，背后可辨认出细长而暗的彗核轮廓。',
+    probe: '乔托号（ESA Giotto）', date: '1986 年 3 月', credit: 'Halley Multicolor Camera Team / Giotto Project / ESA',
+    source: 'https://science.nasa.gov/solar-system/comets/1p-halley/',
+  }],
   Mercury: [
     {
       id: 'PIA10179',

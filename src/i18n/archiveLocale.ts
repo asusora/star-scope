@@ -1,3 +1,4 @@
+import { cometProfile } from '../data/cometProfiles'
 import type { ArchiveEntry, ProbePhoto } from '../scene/types'
 import { formatNum, locale, regionFullLabel, type Locale } from './index'
 import {
@@ -41,6 +42,9 @@ export function localizedEntry(
       probePhotos: entry.probePhotos,
     }
   }
+
+  if (entry.comet) return { ...cometProfile(entry.comet, lang),
+    probePhotos: entry.probePhotos?.map(photo => localizedProbePhoto(photo, lang)) }
 
   // Deep-sky entries (Galaxies, Stars, Exoplanets)
   if (!entry.object) {

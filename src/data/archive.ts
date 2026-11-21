@@ -1,3 +1,5 @@
+import { comets } from './comets'
+import { cometProfile } from './cometProfiles'
 import { archivePhotos, thumbs } from './assets'
 import { getProbePhotos } from './probePhotos'
 import type { ArchiveEntry, World } from '../scene/types'
@@ -21,9 +23,11 @@ export function normalized(s: string) {
 export function createArchive(worlds: World[]): ArchiveEntry[] {
   const messierBase =
     'https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-messier-catalog/messier-'
+  // Galaxy center coordinates in ICRS degrees from the CDS SIMBAD catalogue.
   const catalogEntries: ArchiveEntry[] = [
     {
       id: 'm31',
+      sky: { ra: 10.684708, dec: 41.268750 },
       title: '仙女座星系',
       code: 'M31 · NGC 224',
       alt: 'Andromeda Galaxy',
@@ -35,6 +39,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     },
     {
       id: 'm33',
+      sky: { ra: 23.462069, dec: 30.660175 },
       title: '三角座星系',
       code: 'M33 · NGC 598',
       alt: 'Triangulum Galaxy',
@@ -46,6 +51,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     },
     {
       id: 'm51',
+      sky: { ra: 202.469575, dec: 47.195258 },
       title: '涡状星系',
       code: 'M51 · NGC 5194',
       alt: 'Whirlpool Galaxy',
@@ -57,6 +63,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     },
     {
       id: 'm104',
+      sky: { ra: 189.997633, dec: -11.623054 },
       title: '草帽星系',
       code: 'M104 · NGC 4594',
       alt: 'Sombrero Galaxy 宽边帽星系',
@@ -68,6 +75,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     },
     {
       id: 'm82',
+      sky: { ra: 148.968458, dec: 69.679703 },
       title: '雪茄星系',
       code: 'M82 · NGC 3034',
       alt: 'Cigar Galaxy',
@@ -80,6 +88,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     },
     {
       id: 'm87',
+      sky: { ra: 187.705931, dec: 12.391123 },
       title: '室女座 A',
       code: 'M87 · NGC 4486',
       alt: 'Virgo A 室女A 室女座A星系 M87星系',
@@ -363,6 +372,10 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
           (m.estimate ? 'https://tamkin3.eps.harvard.edu/iauc/09000/09091.html' : jplFacts),
       })
     }
+  }
+  for (const comet of comets) {
+    catalogEntries.push({ ...cometProfile(comet, 'zh'), id: comet.id, comet,
+      alt: comet.en, group: '太阳系', probePhotos: getProbePhotos(comet.id) })
   }
   return catalogEntries
 }

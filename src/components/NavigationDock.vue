@@ -146,8 +146,31 @@ function touchEnd(event: TouchEvent) {
               >
             </fieldset>
           </div>
+          <button v-if="!ui.galaxy && !ui.voyager && !ui.phenomena && !ui.deepEntry" id="showComets"
+            :aria-pressed="ui.showComets" @click="atlas.setShowComets(!ui.showComets)">
+            <i></i><span>{{ pick('彗星', 'Comets') }}</span>
+          </button>
+          <button v-if="!ui.galaxy && !ui.voyager && !ui.phenomena && !ui.deepEntry" id="cometOrbits"
+            :aria-pressed="ui.showComets && ui.cometOrbits" :disabled="!ui.showComets"
+            @click="atlas.setCometOrbits(!ui.cometOrbits)">
+            <i></i><span>{{ pick('彗星轨道', 'Comet Orbits') }}</span>
+          </button>
           <button id="labels" :aria-pressed="ui.showNames" @click="atlas.setLabels(!ui.showNames)">
             <i></i><span>{{ pick('标注', 'Labels') }}</span>
+          </button>
+          <button
+            v-if="!ui.galaxy && !ui.phenomena && !ui.deepEntry"
+            id="voyagerOverlay"
+            :aria-pressed="ui.voyager || ui.voyagerOverlay"
+            :disabled="ui.voyager"
+            :title="
+              ui.voyager
+                ? pick('当前处于旅行者任务视图', 'Active in Voyager mission view')
+                : pick('在太阳系中叠加两艘旅行者轨迹', 'Toggle both Voyager trajectories in the Solar System')
+            "
+            @click="atlas.setVoyagerOverlay(!ui.voyagerOverlay)"
+          >
+            <i></i><span>{{ pick('旅行者轨迹', 'Voyager Tracks') }}</span>
           </button>
         </div>
       </div>
@@ -192,7 +215,7 @@ function touchEnd(event: TouchEvent) {
           <button
             class="destination"
             id="home"
-            :aria-pressed="!ui.deepEntry && !ui.galaxy && !ui.planet && !ui.region"
+            :aria-pressed="!ui.deepEntry && !ui.galaxy && !ui.voyager && !ui.phenomena && !ui.planet && !ui.region && !ui.comet"
             @pointerover="$event.pointerType === 'mouse' && atlas.preview(null)"
             @click="atlas.openPlanet(null)"
           >
