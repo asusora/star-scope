@@ -267,7 +267,8 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     trojan: '木星特洛伊群（L4/L5 共轨区）',
     centaur: '半人马小天体带（巨行星之间）',
     outer: '柯伊伯带（海王星外 30–50 AU）',
-    scattered: '离散盘与内奥尔特云（50–1000 AU）',
+    scattered: '离散盘与内奥尔特云（50 AU 以外）',
+    oort: '外奥尔特云与引力边界（2,000–150,000 AU）',
   }
   const upcomingMissions: Record<string, string> = {
     Psyche: '暂无（灵神星号在途，预计 2029 年抵达）',
@@ -288,6 +289,7 @@ export function createArchive(worlds: World[]): ArchiveEntry[] {
     Farfarout: '2018 AG37 远极星 Farfarout 最远天体',
     VP113: '2012 VP113 拜登 类赛德娜 分离天体',
     Sedna: '90377 Sedna 赛德娜 塞德娜 内奥尔特云',
+    Leleakuhonua: 'Leleakuhonua The Goblin 哥布林 类赛德娜',
   }
   for (const p of worlds) {
     const worldProbes = getProbePhotos(p.id)

@@ -26,6 +26,22 @@ import { trappistEntryId, trappistPaper } from '../data/trappist'
 import { createDeepModels, galaxyForms, planetarySystems } from './deepModels'
 import { createDeepCanvasRenderer } from './deepCanvas'
 import { createVoyagerBoundaries, createVoyagerModel } from './voyagerModel'
+import { createOortBoundaries } from './oortBoundary'
+import {
+  NH_ARROKOTH_YEAR,
+  NH_END_YEAR,
+  NH_JUPITER_YEAR,
+  NH_PLUTO_YEAR,
+  NH_START_YEAR,
+  newHorizonsMilestones,
+  newHorizonsPlaybackRate,
+  nhMilestoneBody,
+  nhMilestoneShort,
+  nhMilestoneTitle,
+  type NewHorizonsMilestoneId,
+  type NewHorizonsView,
+} from '../data/newHorizons'
+import type { createNewHorizonsModel } from './newHorizonsModel'
 import { createPhenomenaModel } from './phenomenaModel'
 import {
   computePhenomenonStats,
@@ -92,12 +108,14 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     centaurBands,
     outerBand,
     scatteredBand,
+    allOrbitsOuter,
     oortBand,
+    outerOortBand,
     bandMid,
     mapOuterAU,
   } = solarSystem
   const scene = new T.Scene(),
-    camera = new T.PerspectiveCamera(45, 1, 0.012, 9500)
+    camera = new T.PerspectiveCamera(45, 1, 0.012, 18000)
   let renderer: T.WebGLRenderer | null = null
   try {
     renderer = new T.WebGLRenderer({
@@ -160,6 +178,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       'webglcontextrestored',
       () => {
         setBackground()
+        if (renderer) bakeCosmicSky(renderer)
         requestDraw()
       },
       { signal: listeners.signal },
@@ -181,10 +200,12 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     kuiperDust,
     scatteredDust,
     oortDust,
+    outerOortDust,
     setBeltsVisible,
     updateBeltVisibility,
     skyDome,
     createCosmicSkyMaterial,
+    bakeCosmicSky,
     updateSpaceTime,
     setSkyTexture,
     sphere,
@@ -224,22 +245,39 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     v2: createVoyagerModel(scene, !!renderer, planets, mapOuterAU, tag, 'v2'),
   }
   const boundaries = createVoyagerBoundaries(scene, !!renderer, tracks, tag)
+  const oortBoundaries = createOortBoundaries(scene, !!renderer, outerOortBand, tag, pins, () => {
+    const entry = catalogEntries.find((e) => e.id === 'proxima')
+    if (entry) openDeepTarget(entry)
+  })
+  oortBoundaries.refreshLabels(locale.value)
   const phenomena = createPhenomenaModel(scene, !!renderer, worlds, planets, mapOuterAU, tag)
   const earth = planets.find(p => p.id === 'Earth')!
+  const jupiter = planets.find(p => p.id === 'Jupiter')!
+  const pluto = worlds.find(p => p.id === 'Pluto')!
+  const arrokoth = worlds.find(p => p.id === 'Arrokoth')!
   const focusedTrack = () => tracks[ui.voyagerFocus]
   function syncVoyagerVisibility() {
     for (const id of voyagerIds) {
       const selected = ui.voyagerMode === 'both' || ui.voyagerMode === id
-      tracks[id].setVisibility(voyagerMode && selected, !voyagerMode && !phenomenaMode && voyagerOverlay, galaxyView || !!deepTarget)
+      tracks[id].setVisibility(
+        voyagerMode && selected,
+        !voyagerMode && !phenomenaMode && !newHorizonsMode && voyagerOverlay,
+        galaxyView || !!deepTarget,
+      )
     }
     boundaries.setVisibility(voyagerMode && !galaxyView && !deepTarget, ui.voyagerMode)
+    newHorizons?.setVisibility(newHorizonsMode && !galaxyView && !deepTarget)
   }
   function updateVoyagers() {
     boundaries.update(camera, ambientTime)
     for (const id of voyagerIds) tracks[id].update(camera, ambientTime, pixelRatio)
+    newHorizons?.update(camera, ambientTime, pixelRatio, nhView === 'probe')
   }
   function voyagerHitAt(x: number, y: number) {
     return tracks.v1.pickAt(x, y, project) ?? tracks.v2.pickAt(x, y, project)
+  }
+  function newHorizonsHitAt(x: number, y: number) {
+    return newHorizonsMode && newHorizons ? newHorizons.pickAt(x, y, project) : null
   }
   const loadTexture = renderer ? createTextureUploads(renderer) : null
   const detail = createPlanetDetail(renderer, scene, requestDraw, loadTexture)
@@ -283,11 +321,22 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function updateSurfaceDetail() {
     let largest = 0
+    const nhPreferredWorld = newHorizonsMode
+      ? nhView === 'pluto'
+        ? pluto
+        : nhView === 'arrokoth'
+          ? arrokoth
+          : nhView === 'jupiter'
+            ? jupiter
+            : null
+      : null
     const preferredBody = focusMoon
       ? (bodyByMoon.get(focusMoon) ?? getMinorDetailBody(focusMoon))
       : focusPlanet
         ? (bodyByWorld.get(focusPlanet) ?? null)
-        : null
+        : nhPreferredWorld
+          ? (bodyByWorld.get(nhPreferredWorld) ?? null)
+          : null
     let next: PlanetBody | null = null
     if (!galaxyView && !deepTarget) {
       if (preferredBody?.minorMoon && preferredBody.minorMoon.parent.anchor.visible) {
@@ -352,6 +401,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   let galaxyView = false,
     voyagerMode = false,
+    newHorizonsMode = false,
     phenomenaMode = false,
     phenomenonId: PhenomenonId = ui.phenomenonId,
     phenomenonYear = ui.phenomenonYear,
@@ -361,6 +411,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     voyagerView: VoyagerView = ui.voyagerView,
     voyagerMilestoneId = ui.voyagerMilestone,
     voyagerCustomDistance: number | null = null,
+    nhYear = ui.newHorizonsYear,
+    nhView: NewHorizonsView = ui.newHorizonsView,
+    nhMilestoneId: NewHorizonsMilestoneId = ui.newHorizonsMilestone,
+    nhCustomDistance: number | null = null,
     focusPlanet: World | null = null,
     focusMoon: Moon | null = null,
     focusRegion: Belt | null = null,
@@ -371,9 +425,14 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   const endPoints = { v1: tracks.v1.probePos.clone(), v2: tracks.v2.probePos.clone() }
   const voyagerCenter = v3()
   const voyagerFlybyCenter = v3(-48, 8, -18)
+  const nhCenter = v3()
+  const nhEndPoint = v3()
   const phenomenaAnchor = v3()
   let voyagerPanel: HTMLElement | null = null
   let phenomenaPanel: HTMLElement | null = null
+  let newHorizonsPanel: HTMLElement | null = null
+  let newHorizons: ReturnType<typeof createNewHorizonsModel> | null = null
+  let newHorizonsRequest = 0
   let deepTarget: DeepModel | null = null
   let orbitMode: OrbitMode = 'smart',
     showNames = true,
@@ -402,6 +461,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   const selectedTag = tag('', 'hot')
   function baseCenter() {
     if (deepTarget) return deepCenter()
+    if (newHorizonsMode && newHorizons) {
+      if (nhView === 'probe') return newHorizons.probePos
+      if (nhView === 'jupiter') return nhCenter.copy(jupiter.pos).lerp(newHorizons.probePos, 0.36)
+      if (nhView === 'pluto') return nhCenter.copy(pluto.pos).lerp(newHorizons.probePos, 0.42)
+      if (nhView === 'arrokoth') return nhCenter.copy(arrokoth.pos).lerp(newHorizons.probePos, 0.44)
+      return nhCenter.copy(nhEndPoint).multiplyScalar(0.45)
+    }
     if (phenomenaMode) return phenomena.getCameraAnchor(phenomenonId, phenomenonView, phenomenaAnchor)
     if (voyagerMode) {
       if (voyagerView === 'probe') return focusedTrack().probePos
@@ -433,6 +499,14 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   function defaultDistance() {
     if (deepTarget) return deepDistance()
     const narrow = Math.max(1, 1.2 / camera.aspect)
+    if (newHorizonsMode && newHorizons) {
+      if (nhCustomDistance !== null) return nhCustomDistance * narrow
+      if (nhView === 'probe') return 4.6 * narrow
+      if (nhView === 'jupiter') return jupiter.extent * 2.45 * narrow
+      if (nhView === 'pluto') return pluto.extent * 2.15 * narrow
+      if (nhView === 'arrokoth') return 6.2 * narrow
+      return newHorizons.ephemeris.mapper.auToScene(66.5) * 2.08 * narrow
+    }
     if (galaxyView)
       return Math.max(424, 196 * Math.sqrt(1 + 1 / (camera.aspect * 0.4142) ** 2) * 1.06)
     if (phenomenaMode) {
@@ -455,7 +529,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       return p.extent * 2.85 * narrow
     }
     if (focusRegion) {
-      const distByRegion: Record<Belt, number> = {
+      if (focusRegion === 'oort') {
+        const halfFov = Math.atan(Math.tan(camera.fov * rad / 2) * Math.min(1, camera.aspect))
+        return (outerOortBand.outer * 1.18) / Math.sin(halfFov)
+      }
+      const distByRegion: Record<Exclude<Belt, 'oort'>, number> = {
         main: 64,
         trojan: 72,
         centaur: 88,
@@ -464,10 +542,35 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       }
       return distByRegion[focusRegion] * narrow
     }
+    if (orbitMode === 'all') {
+      const halfFov = Math.atan(Math.tan(camera.fov * rad / 2) * Math.min(1, camera.aspect))
+      return (allOrbitsOuter * 1.03) / Math.sin(halfFov)
+    }
     return fullSystemDistance()
   }
   function defaultAngles() {
     if (deepTarget) return deepAngles()
+    if (newHorizonsMode && newHorizons) {
+      if (nhView === 'probe') {
+        const p = newHorizons.probePos
+        if (nhCustomDistance !== null) {
+          return [Math.atan2(-p.x, -p.z) + 0.85, 0.24]
+        }
+        const toEarth = v3().subVectors(earth.pos, p).normalize()
+        const right = v3().crossVectors(v3(0, 1, 0), toEarth).normalize()
+        const up = v3().crossVectors(toEarth, right)
+        const angle = toEarth
+          .multiplyScalar(0.58)
+          .addScaledVector(right, 0.74)
+          .addScaledVector(up, 0.28)
+          .normalize()
+        return [Math.atan2(angle.x, angle.z), Math.asin(angle.y)]
+      }
+      if (nhView === 'jupiter') return [Math.atan2(-jupiter.pos.x, -jupiter.pos.z) + 0.74, 0.26]
+      if (nhView === 'pluto') return [Math.atan2(-pluto.pos.x, -pluto.pos.z) + 0.56, 0.27]
+      if (nhView === 'arrokoth') return [Math.atan2(-arrokoth.pos.x, -arrokoth.pos.z) + 0.6, 0.24]
+      return [0.36, width < 600 ? 0.68 : 0.5]
+    }
     if (galaxyView) return [0.2, 0.92]
     if (phenomenaMode) {
       const f = phenomena.getCameraFraming(phenomenonId, phenomenonView, camera.aspect, width < 600)
@@ -496,20 +599,23 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       const p = focusComet.body.root.position
       return [Math.atan2(p.x, p.z) + 1.24, 0.24]
     }
+    if (focusRegion === 'oort') return [0.32, width < 600 ? 0.54 : 0.44]
     if (!focusPlanet) return [0.13, width < 600 ? 0.83 : 0.53]
     const p = focusPlanet
     return [Math.atan2(-p.pos.x, -p.pos.z) + 0.66, focusMoon ? 0.23 : 0.31]
   }
   function cameraLimits(): [number, number] {
     if (deepTarget) return deepLimits()
+    const outerMax = Math.max(4600, outerOortBand.outer * 4.6)
+    if (newHorizonsMode) return [1.6, Math.max(2200, fullSystemDistance() * 4.2)]
     if (galaxyView) return [88, Math.max(1100, defaultDistance() * 2)]
     if (phenomenaMode) return [2.6, Math.max(2200, fullSystemDistance() * 4.2)]
     if (voyagerMode) return [2.1, Math.max(2400, fullSystemDistance() * 4.5)]
     if (focusComet) {
-      return [Math.max(2.1, focusComet.body.nucleusRadius * 3.0), Math.max(1800, fullSystemDistance() * 3.8)]
+      return [Math.max(2.1, focusComet.body.nucleusRadius * 3.0), outerMax]
     }
     const size = focusMoon ? focusMoon.r : focusPlanet ? focusPlanet.r : 0.12
-    return [Math.max(0.032, size * 1.55), Math.max(1800, fullSystemDistance() * 3.8)]
+    return [Math.max(0.032, size * 1.55), outerMax]
   }
   let zoomTarget: number | null = null
   let pendingZoomPoint: Point | null = null
@@ -556,7 +662,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     camera.up.set(0, 1, 0)
     camera.lookAt(target)
     camera.rotateZ(
-      deepTarget ? deepTarget.form?.roll || 0 : voyagerMode || phenomenaMode || focusPlanet ? -0.02 : -0.105,
+      deepTarget
+        ? deepTarget.form?.roll || 0
+        : voyagerMode || newHorizonsMode || phenomenaMode || focusPlanet
+          ? -0.02
+          : -0.105,
     )
     camera.updateMatrixWorld()
     skyDome.position.copy(camera.position)
@@ -564,7 +674,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     shootingStars.position.copy(camera.position)
   }
   function updateProjection() {
-    const hasConsole = voyagerMode || phenomenaMode
+    const hasConsole = voyagerMode || phenomenaMode || newHorizonsMode
     const offset = deepTarget
       ? height * (width < 700 ? 0.045 : 0.025)
       : hasConsole
@@ -575,11 +685,18 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     const shift = hasConsole && !deepTarget && width >= 700 ? -Math.min(width * 0.14, 195) : 0
     camera.setViewOffset(width, height, shift, offset, width, height)
   }
+  const canvasRect = { left: 0, top: 0 }
+  function updateCanvasRect() {
+    const box = canvas.getBoundingClientRect()
+    canvasRect.left = box.left
+    canvasRect.top = box.top
+  }
   function resize() {
     const box = stage.getBoundingClientRect()
     const w = Math.max(1, Math.round(box.width))
     const h = Math.max(1, Math.round(box.height))
     const ratio = Math.min(devicePixelRatio || 1, 1.75)
+    updateCanvasRect()
     if (w === width && h === height && ratio === pixelRatio) return
     width = w
     height = h
@@ -628,7 +745,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       enabled = !galaxyView && orbitMode !== 'off'
     const host = focusPlanet || (orbitMode === 'smart' && !focusRegion && nearbyHost) || null
     const detail = !!host || !!focusRegion
-    const cometsActive = ui.showComets && !galaxyView && !voyagerMode && !phenomenaMode
+    const cometsActive = ui.showComets && !galaxyView && !voyagerMode && !newHorizonsMode && !phenomenaMode
     for (const track of cometTracks) {
       const isFocus = track === focusComet
       const isHover = track === hoveredCometTrack
@@ -637,6 +754,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         if (isFocus) opacity = 0.88
         else if (isHover) opacity = 0.72
         else if (ui.cometOrbits) opacity = focusComet ? 0.34 : 0.72
+        else if (focusRegion === 'oort' && track.comet.id === 'C/2014 UN271') opacity = 0.52
       }
       track.body.setOrbitVisual(opacity, isFocus || isHover, orbitMotion.matches)
     }
@@ -644,16 +762,21 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       const active = p === host
       const preview = orbitMode === 'smart' && p === hoveredBody && p.anchor.visible
       const alignPluto = phenomenaMode && phenomenonId === 'alignment1982' && p.id === 'Pluto'
+      const nhTargetOrbit = newHorizonsMode && (p.id === 'Pluto' || p.id === 'Arrokoth')
+      const oortInnerMember =
+        focusRegion === 'oort' && (p.id === 'Sedna' || p.id === 'OF201' || p.id === 'Leleakuhonua' || p.id === 'FE72')
       let opacity = 0
       if (enabled) {
         if (active || preview) opacity = 0.52
         else if (alignPluto) opacity = 0.36
+        else if (nhTargetOrbit) opacity = p.id === 'Pluto' ? 0.42 : 0.36
+        else if (oortInnerMember) opacity = 0.24
         else if (all) opacity = p.region ? 0.19 : 0.31
         else if (focusRegion && p.region === focusRegion) opacity = 0.18
         else if (!p.region) opacity = phenomenaMode && phenomenonId === 'sl9_1994' ? 0.14 : detail ? 0.08 : 0.31
       }
       p.path.material.color.setHex(
-        active || preview || alignPluto
+        active || preview || alignPluto || nhTargetOrbit
           ? orbitColors.focus
           : p.region
             ? orbitColors[p.region]
@@ -661,7 +784,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       )
       setOrbitOpacity(p.path, opacity, now)
       // All satellite loops for a host share a draw call. Build them on first use.
-      if (all && enabled && p.moons.length && !p.allMoonPaths) {
+      const showNhMoonPaths = newHorizonsMode && nhView === 'pluto' && p.id === 'Pluto'
+      if ((all || showNhMoonPaths) && enabled && p.moons.length && !p.allMoonPaths) {
         p.allMoonPaths = pathFor(
           p.moons.map((m) => m.orbit),
           orbitColors.moon,
@@ -670,7 +794,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         )
         p.moonTracks.add(p.allMoonPaths)
       }
-      if (p.allMoonPaths) setOrbitOpacity(p.allMoonPaths, all && enabled ? 0.21 : 0, now)
+      if (p.allMoonPaths)
+        setOrbitOpacity(p.allMoonPaths, (all || showNhMoonPaths) && enabled ? (showNhMoonPaths ? 0.34 : 0.21) : 0, now)
     }
     let moon = enabled ? focusMoon : null
     if (enabled && !all && !moon) {
@@ -688,7 +813,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     highlightedMoon = moon
   }
   function smartHost() {
-    if (focusPlanet || focusRegion || galaxyView || voyagerMode || phenomenaMode || zoom > fullSystemDistance() * 0.6)
+    if (focusPlanet || focusRegion || galaxyView || voyagerMode || newHorizonsMode || phenomenaMode || zoom > fullSystemDistance() * 0.6)
       return null
     let best = null,
       closest = Infinity
@@ -713,7 +838,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   }
   function syncPaths() {
     for (const p of worlds) p.anchor.visible = !galaxyView
-    cometLayer.visible = ui.showComets && !galaxyView && !voyagerMode && !phenomenaMode
+    cometLayer.visible = ui.showComets && !galaxyView && !voyagerMode && !newHorizonsMode && !phenomenaMode
     cometOrbitLayer.visible = cometLayer.visible
     orbitLayer.visible = !galaxyView
     updateOrbitTargets()
@@ -763,10 +888,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     }
     return true
   }
-  function labelsAndTargets() {
+  function labelsAndTargets(deltaSec = 1 / 60) {
     pickables.length = 0
     const markers: Label[] = []
     if (galaxyView) {
+      oortBoundaries.update(0, ambientTime, deltaSec, true, project, placeText, null, false, width, height)
       positionSkyTargets(null)
       placeLabels(showNames ? markers : [], width, height)
       return
@@ -800,10 +926,19 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         !object.prominent &&
         !smallVisible &&
         focusRegion !== object.region &&
-        object !== focusPlanet
+        object !== focusPlanet &&
+        !(newHorizonsMode && (object.id === 'Pluto' || object.id === 'Arrokoth'))
       )
         continue
       if (voyagerMode && object instanceof World && object.region) continue
+      if (
+        newHorizonsMode &&
+        object instanceof World &&
+        object.region &&
+        object.id !== 'Pluto' &&
+        object.id !== 'Arrokoth'
+      )
+        continue
       if (
         phenomenaMode &&
         object instanceof World &&
@@ -844,7 +979,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
           const text = moonLabel(m)
           if (selectedTag.textContent !== text) selectedTag.textContent = text
           markers.unshift({ el: selectedTag, q, r })
-        } else if (p === focusPlanet && !focusMoon && m.featured) {
+        } else if (
+          (p === focusPlanet || (newHorizonsMode && ((nhView === 'pluto' && p.id === 'Pluto') || (nhView === 'jupiter' && p.id === 'Jupiter')))) &&
+          !focusMoon &&
+          m.featured
+        ) {
           const text = moonLabel(m)
           if (!m.tag) m.tag = tag(text)
           else if (m.tag.textContent !== text) m.tag.textContent = text
@@ -858,10 +997,54 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     for (const id of voyagerIds) {
       tracks[id].collectLabels(project, width, height, markers, id === ui.voyagerFocus ? voyagerMilestoneId : '', locale.value, tightProbe && id === ui.voyagerFocus, voyagerView === 'flyby' && id === ui.voyagerFocus)
     }
-    positionSkyTargets(showNames && !voyagerMode && !phenomenaMode ? markers : null)
+    const tightNhProbe =
+      newHorizonsMode &&
+      nhView === 'probe' &&
+      nhCustomDistance === null &&
+      !!newHorizons &&
+      camera.position.distanceTo(newHorizons.probePos) < 24
+    newHorizons?.collectLabels(
+      project,
+      width,
+      height,
+      markers,
+      nhMilestoneId,
+      locale.value,
+      tightNhProbe,
+      nhView === 'overview',
+    )
+    positionSkyTargets(showNames && !voyagerMode && !newHorizonsMode && !phenomenaMode ? markers : null)
+    let oortFade = 0
+    if (!voyagerMode && !newHorizonsMode && !phenomenaMode && !focusPlanet && !focusMoon && !excursion) {
+      const camR = camera.position.length()
+      const zoomRatio = camR / Math.max(1, fullSystemDistance())
+      if (focusRegion === 'oort') oortFade = 1
+      else if (focusComet?.comet.id === 'C/2014 UN271') oortFade = T.MathUtils.smoothstep(zoomRatio, 0.95, 1.85)
+      else oortFade = T.MathUtils.smoothstep(zoomRatio, 1.35, 2.25)
+    }
+    oortBoundaries.update(
+      oortFade,
+      ambientTime,
+      deltaSec,
+      orbitMotion.matches,
+      project,
+      placeText,
+      markers,
+      showNames,
+      width,
+      height,
+    )
     boundaries.collectLabels(project, markers)
     phenomena.collectLabels(project, width, height, markers, locale.value)
-    const activePanel = !notesOpen ? (voyagerMode ? voyagerPanel : phenomenaMode ? phenomenaPanel : null) : null
+    const activePanel = !notesOpen
+      ? voyagerMode
+        ? voyagerPanel
+        : newHorizonsMode
+          ? newHorizonsPanel
+          : phenomenaMode
+            ? phenomenaPanel
+            : null
+      : null
     placeLabels(showNames ? markers : [], width, height, activePanel)
   }
   // The galaxy uses its own illustrative length scale. The Solar System marker
@@ -1008,10 +1191,17 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   solarMarker.onclick = () => openPlanet(null)
   const solarNotes: (Note & { region: Belt })[] = [
     {
+      name: '外奥尔特云与太阳引力边界',
+      region: 'oort',
+      p: v3(0.75, 0, -0.66).normalize().multiplyScalar(outerOortBand.lightYearR),
+      body: '由扁盘状内奥尔特云（希尔斯云，约 2,000–20,000 AU）向外过渡为近球壳状外奥尔特云（约 20,000–100,000+ AU），跨越 1 光年（63,241 AU）直至约 150,000 AU 的太阳希尔球引力极限。巨型长周期彗星 C/2014 UN271 正是从数万 AU 外俯冲而来；再向外沿南天方向延伸至 4.24 光年外，便是最近的恒星比邻星。',
+      source: 'https://science.nasa.gov/solar-system/oort-cloud/facts/',
+    },
+    {
       name: '离散盘与内奥尔特云',
       region: 'scattered',
       p: v3(-0.62, 0, -0.78).normalize().multiplyScalar(bandMid(scatteredBand)),
-      body: '海王星 50 AU 之外是高倾角、大偏心率的离散盘，以及延伸至数百至上千 AU 的分离天体区与内奥尔特云。共工星、阋神星、远极星（约 132 AU）与深红矮行星赛德娜（远日点 937 AU）均分布于此。',
+      body: '柯伊伯带之外，部分小天体沿狭长的椭圆轨道绕日运行。赛德娜的远日点约为 937 AU，2017 OF201 约为 1,600 AU，Leleākūhonua 约为 2,625 AU，2014 FE72 的估算远日点可达 5,340 AU。',
       source: 'https://science.nasa.gov/solar-system/kuiper-belt/sedna/',
     },
     {
@@ -1109,6 +1299,14 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         name: `${milestoneTitle(m, lang)} (${lang === 'en' ? m.dateEn : m.dateZh})`,
         p: focusedTrack().milestoneNodes.find((n) => n.milestone.id === m.id)?.pos,
         body: milestoneBody(m, lang),
+        source: m.source,
+      }))
+    }
+    if (newHorizonsMode) {
+      return newHorizonsMilestones.map((m) => ({
+        name: `${nhMilestoneTitle(m, lang)} (${lang === 'en' ? m.dateEn : m.dateZh})`,
+        p: newHorizons?.milestoneNodes.find((n) => n.milestone.id === m.id)?.pos,
+        body: nhMilestoneBody(m, lang),
         source: m.source,
       }))
     }
@@ -1224,7 +1422,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     pinNodes = []
     if (notesOpen) {
       currentNotes.forEach((note, i) => {
-        if (deepTarget || focusComet || focusPlanet || voyagerMode || phenomenaMode || (galaxyView && i === 0)) return
+        if (deepTarget || focusComet || focusPlanet || voyagerMode || newHorizonsMode || phenomenaMode || (galaxyView && i === 0)) return
         const pin = document.createElement('button')
         pin.textContent = note.name
         pin.className = 'map-pin'
@@ -1278,24 +1476,49 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     } else preview(null)
     ui.dockOpen = open
   }
-  function syncVoyagerState(updatePlanets = true) {
+  let lastVoyHudSync = 0
+  function syncVoyagerState(updatePlanets = true, forceHud = true) {
     for (const id of voyagerIds) tracks[id].setYear(voyagerYear)
+    let focusSwitched = false
     if (ui.voyagerMode === 'both' && ui.voyagerFocus === 'v1' && voyagerYear < VOYAGER_START_YEAR) {
       ui.voyagerFocus = 'v2'
       refreshNotes()
+      focusSwitched = true
     }
     const voyager = focusedTrack()
-    const peer = tracks[ui.voyagerFocus === 'v1' ? 'v2' : 'v1']
-    ui.voyagerPeerStats = ui.voyagerMode === 'both' && voyagerYear >= missionStart(peer.id)
-      ? peer.ephemeris.statsAt(voyagerYear, locale.value, peer.getSample()) : null
     if (voyagerMode && updatePlanets) {
       modelStepAtEpoch(voyagerYear, clock, focusMoon)
     }
     const nextMs = voyager.ephemeris.nearestMilestoneId(voyagerYear)
+    const milestoneChanged = nextMs !== voyagerMilestoneId
     voyagerMilestoneId = nextMs
+    const now = performance.now()
+    if (!forceHud && !focusSwitched && !milestoneChanged && now - lastVoyHudSync < 40) return
+    lastVoyHudSync = now
+    const peer = tracks[ui.voyagerFocus === 'v1' ? 'v2' : 'v1']
+    ui.voyagerPeerStats = ui.voyagerMode === 'both' && voyagerYear >= missionStart(peer.id)
+      ? peer.ephemeris.statsAt(voyagerYear, locale.value, peer.getSample()) : null
     ui.voyagerYear = voyagerYear
     ui.voyagerMilestone = nextMs
     ui.voyagerStats = voyager.ephemeris.statsAt(voyagerYear, locale.value, voyager.getSample())
+  }
+  let lastNhHudSync = 0
+  function syncNewHorizonsState(updatePlanets = true, forceHud = true) {
+    if (!newHorizons) return
+    newHorizons.setYear(nhYear)
+    if (newHorizonsMode && updatePlanets) {
+      const syncJovian = Math.abs(nhYear - NH_JUPITER_YEAR) < 0.25
+      modelStepAtEpoch(nhYear, clock, focusMoon, syncJovian)
+    }
+    const nextMs = newHorizons.ephemeris.nearestMilestoneId(nhYear)
+    const milestoneChanged = nextMs !== nhMilestoneId
+    nhMilestoneId = nextMs
+    const now = performance.now()
+    if (!forceHud && !milestoneChanged && now - lastNhHudSync < 40) return
+    lastNhHudSync = now
+    ui.newHorizonsYear = nhYear
+    ui.newHorizonsMilestone = nextMs
+    ui.newHorizonsStats = newHorizons.ephemeris.statsAt(nhYear, locale.value, newHorizons.getSample())
   }
   let lastPhenHudSync = 0
   function syncPhenomenaState(updatePlanets = true, forceHud = true, dt = 0) {
@@ -1316,11 +1539,16 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   function openGalaxy() {
     focusComet = null
     if (deepTarget) leaveDeepTarget(true)
-    if (galaxyView) return
+    if (galaxyView) {
+      newHorizonsRequest++
+      return
+    }
     if (!galaxyImage.src) galaxyImage.src = sources.Galaxy
     voyagerMode = false
+    newHorizonsMode = false
     phenomenaMode = false
     voyagerCustomDistance = null
+    nhCustomDistance = null
     galaxyView = true
     focusPlanet = null
     focusMoon = null
@@ -1329,9 +1557,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     drawer(false)
     updateView(true)
   }
-  // This renderer keeps the same three-dimensional positions and camera when WebGL is unavailable.
-  function drawCanvas() {
-    if (!ctx) return
+  // Shared by the main scene and historical mission replays in Canvas mode.
+  function drawCanvasSky() {
     ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
     const bgGrad = ctx.createRadialGradient(
       width * 0.5,
@@ -1367,6 +1594,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, 0.72 * pulse).toFixed(2)})`
       ctx.fillRect(q.x - sz * 0.5, q.y - sz * 0.5, sz, sz)
     }
+  }
+  function drawCanvas() {
+    if (!ctx) return
+    drawCanvasSky()
     if (galaxyView) {
       drawGalaxy2D()
       return
@@ -1380,13 +1611,16 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       drawField2D(kuiperDust, 'rgba(159,197,223,.37)', 2)
       drawField2D(scatteredDust, 'rgba(166,174,232,.34)', 2)
       drawField2D(oortDust, 'rgba(150,174,226,.22)', 3)
+      drawField2D(outerOortDust, 'rgba(136,196,242,.20)', 3)
     }
+    oortBoundaries.draw2D(ctx, project)
     drawCanvasOrbits()
     if (cometOrbitLayer.visible) {
       for (const { body } of cometTracks) body.drawOrbit2D(ctx, project)
     }
     boundaries.draw2D(ctx, project, camera)
     for (const id of voyagerIds) tracks[id].draw2D(ctx, project)
+    newHorizons?.draw2D(ctx, project)
     phenomena.draw2D(ctx, project)
     const entries: { q: ScreenPoint; r: number; key: string | null; tint?: string; cometBody?: ReturnType<typeof createCometModel> }[] = []
     if (cometLayer.visible) {
@@ -1406,6 +1640,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     for (const id of voyagerIds) {
       if (tracks[id].root.visible) entry(tracks[id].probePos, 4, id)
     }
+    if (newHorizons?.root.visible) entry(newHorizons.probePos, 4, 'nh')
     entry(sun.pos, sun.r, 'Sun')
     for (const p of worlds) {
       if (!p.anchor.visible) continue
@@ -1423,6 +1658,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       }
       if (key === 'v1' || key === 'v2') {
         tracks[key].drawProbe2D(ctx, project, q)
+        continue
+      }
+      if (key === 'nh' && newHorizons) {
+        newHorizons.drawProbe2D(ctx, project, q)
         continue
       }
       if (key === 'Sun') {
@@ -1501,26 +1740,50 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     ctx.restore()
   }
   let hoverPoint: Point | null = null,
-    rowPreview: World | Moon | null = null
+    rowPreview: World | Moon | null = null,
+    hoverFrame = 0,
+    pendingHoverClient: Point | null = null,
+    hoverPickPoint: Point | null = null,
+    hoverPickBody: World | Moon | typeof sun | null = null,
+    hoverPickComet: (typeof cometTracks)[number] | null = null
+  function clearHoverState(triggerDraw = false) {
+    if (hoverFrame) {
+      cancelAnimationFrame(hoverFrame)
+      hoverFrame = 0
+    }
+    pendingHoverClient = null
+    hoverPoint = null
+    hoverPickPoint = null
+    hoverPickBody = null
+    hoverPickComet = null
+    if (triggerDraw && (hoveredBody || hoveredCometTrack)) {
+      updateOrbitPreview()
+      requestDraw()
+    }
+  }
   function updateOrbitPreview() {
     let body = null,
       host = null
-    const nextHoveredComet = !galaxyView && !voyagerMode && !phenomenaMode && hoverPoint
-      ? cometAt(hoverPoint.x, hoverPoint.y)
+    const reuseHover = !!hoverPoint && hoverPickPoint === hoverPoint
+    const nextHoveredComet = !galaxyView && !voyagerMode && !newHorizonsMode && !phenomenaMode && hoverPoint
+      ? (reuseHover ? hoverPickComet : cometAt(hoverPoint.x, hoverPoint.y))
       : null
     if (!galaxyView && orbitMode === 'smart') {
-      body = rowPreview || (hoverPoint ? bodyAt(hoverPoint.x, hoverPoint.y)?.obj : null) || null
+      body = rowPreview || (hoverPoint ? (reuseHover ? hoverPickBody : bodyAt(hoverPoint.x, hoverPoint.y)?.obj) : null) || null
       host = smartHost()
     }
-    if (body === hoveredBody && host === nearbyHost && nextHoveredComet === hoveredCometTrack) return
+    hoverPickPoint = null
+    if (body === hoveredBody && host === nearbyHost && nextHoveredComet === hoveredCometTrack) return false
     hoveredBody = body
     nearbyHost = host
     hoveredCometTrack = nextHoveredComet
     updateOrbitTargets()
+    return true
   }
   function render(now: number, deltaSec = 1 / 60) {
     updateSpaceTime(ambientTime, pixelRatio)
     if (deepTarget) {
+      oortBoundaries.update(0, ambientTime, deltaSec, true, project, placeText, null, false, width, height)
       if (nearBody) updateSurfaceDetail()
       advanceDeepModel()
       moveCamera(now)
@@ -1541,7 +1804,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     updateSmallBodyDetail()
     updateSurfaceDetail()
     updateOrbitMasks()
-    labelsAndTargets()
+    labelsAndTargets(deltaSec)
     projectPins()
     updateOrbitPreview()
     fadeOrbits(now)
@@ -1559,7 +1822,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   let enteredAt = 0
   let landingSite: { site: Landscape; world: World; moon: Moon | null } | null = null
   function land() {
-    if (excursion || deepTarget || galaxyView || focusRegion || focusComet || voyagerMode || phenomenaMode) return
+    if (excursion || deepTarget || galaxyView || focusRegion || focusComet || voyagerMode || newHorizonsMode || phenomenaMode) return
     zoomTarget = null
     const world = focusPlanet ?? planets.find((p) => p.id === 'Mars')!
     const id = focusMoon?.name ?? world.id,
@@ -1668,8 +1931,17 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
           // Smooth gravity-assist slow-motion pacing around Earth/Jupiter/Saturn, faster in interstellar cruise
           const rate = voyagerPlaybackRate(voyagerYear, ui.voyagerMode)
           voyagerYear = Math.min(VOYAGER_END_YEAR, voyagerYear + delta * speed * rate)
-          syncVoyagerState(true)
-          if (voyagerYear >= VOYAGER_END_YEAR) {
+          const reachedEnd = voyagerYear >= VOYAGER_END_YEAR
+          syncVoyagerState(true, reachedEnd)
+          if (reachedEnd) {
+            playing = ui.playing = false
+          }
+        } else if (newHorizonsMode && newHorizons) {
+          const rate = newHorizonsPlaybackRate(nhYear, nhView)
+          nhYear = Math.min(NH_END_YEAR, nhYear + delta * speed * rate)
+          const reachedEnd = nhYear >= NH_END_YEAR
+          syncNewHorizonsState(true, reachedEnd)
+          if (reachedEnd) {
             playing = ui.playing = false
           }
         } else if (phenomenaMode) {
@@ -1704,8 +1976,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       dirty = false
       lastAmbientDraw = now
       render(now, delta || 1 / 60)
-    } else if ((renderer || voyagerMode || phenomenaMode) && !orbitMotion.matches && now - lastAmbientDraw >= (renderer ? 33 : 80)) {
-      // Keep distant stars gently twinkling, solar plasma flowing, comets outgassing, and Voyager radio pulses streaming
+    } else if ((renderer || voyagerMode || newHorizonsMode || phenomenaMode) && !orbitMotion.matches && now - lastAmbientDraw >= (renderer ? 33 : 80)) {
+      // Keep distant stars gently twinkling, solar plasma flowing, comets outgassing, and spacecraft radio pulses streaming
       const ambientDt = Math.min(0.1, Math.max(0.016, (now - lastAmbientDraw) / 1000))
       lastAmbientDraw = now
       updateSpaceTime(ambientTime, pixelRatio)
@@ -1726,7 +1998,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       !!transition ||
       fadingSolarOrbits ||
       zoomTarget !== null ||
-      ((!!renderer || voyagerMode || phenomenaMode) && !orbitMotion.matches)
+      ((!!renderer || voyagerMode || newHorizonsMode || phenomenaMode) && !orbitMotion.matches)
     if (!frame && keepLoop) frame = requestAnimationFrame(tick)
   }
   function requestDraw() {
@@ -1735,9 +2007,11 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (!frame && !document.hidden) frame = requestAnimationFrame(tick)
   }
   const pointerRay = new T.Raycaster(),
+    pointerNdc = new T.Vector2(),
     ecliptic = new T.Plane(v3(0, 1, 0), 0)
   function screenRay(x: number, y: number) {
-    pointerRay.setFromCamera(new T.Vector2((x / width) * 2 - 1, 1 - (y / height) * 2), camera)
+    pointerNdc.set((x / width) * 2 - 1, 1 - (y / height) * 2)
+    pointerRay.setFromCamera(pointerNdc, camera)
     return pointerRay.ray
   }
   function cometAt(x: number, y: number) {
@@ -1791,7 +2065,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     }
     return null
   }
-  function beltAt(x: number, y: number): { id: Belt; pos: T.Vector3 } | null {
+  function beltAt(x: number, y: number, includeDustRaycast = true): { id: Belt; pos: T.Vector3 } | null {
     const ray = screenRay(x, y),
       surface = ray.intersectPlane(ecliptic, v3())
     if (surface) {
@@ -1811,10 +2085,22 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
         return { id: 'centaur', pos: surface }
       if (r >= outerBand.inner && r <= outerBand.outer) return { id: 'outer', pos: surface }
       if (r >= scatteredBand.inner && r <= oortBand.outer) return { id: 'scattered', pos: surface }
+      if (r > oortBand.outer && r <= outerOortBand.outer) return { id: 'oort', pos: surface }
     }
+    if (!includeDustRaycast) return null
     pointerRay.params.Points.threshold = clamp((zoom * 2) / height, 0.12, 1.2)
     const dust = pointerRay.intersectObjects<T.Points>(
-      [beltDust, hildaDust, trojanDust, centaurDust, neptuneTrojanDust, kuiperDust, scatteredDust, oortDust],
+      [
+        beltDust,
+        hildaDust,
+        trojanDust,
+        centaurDust,
+        neptuneTrojanDust,
+        kuiperDust,
+        scatteredDust,
+        oortDust,
+        outerOortDust,
+      ],
       false,
     )[0]
     if (!dust) return null
@@ -1827,7 +2113,9 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
             ? 'centaur'
             : dust.object === kuiperDust
               ? 'outer'
-              : 'scattered'
+              : dust.object === outerOortDust
+                ? 'oort'
+                : 'scattered'
     return {
       id,
       pos: dust.object.localToWorld(
@@ -1844,9 +2132,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   function pickZoomAnchor(point: Point | null) {
     zoomAnchor.set(0, 0, 0)
     if (point) {
-      const box = canvas.getBoundingClientRect(),
-        x = point.x - box.left,
-        y = point.y - box.top
+      const x = point.x - canvasRect.left,
+        y = point.y - canvasRect.top
       const hit = deepTarget ? deepBodyAt(x, y) : galaxyView ? null : bodyAt(x, y)
       const region = deepTarget || galaxyView || hit ? null : beltAt(x, y)
       const through = hit
@@ -1918,22 +2205,63 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     const [a, b] = [...pointers.values()]
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
   }
+  function flushHover() {
+    hoverFrame = 0
+    if (disposed || pointers.size || !pendingHoverClient || (galaxyView && !deepTarget)) return
+    const x = pendingHoverClient.x - canvasRect.left
+    const y = pendingHoverClient.y - canvasRect.top
+    pendingHoverClient = null
+    const pt = { x, y }
+    hoverPoint = pt
+    const nhHit = deepTarget || galaxyView ? null : newHorizonsHitAt(x, y)
+    const voyHit = nhHit || deepTarget || galaxyView ? null : voyagerHitAt(x, y)
+    const bodyHit = nhHit || voyHit ? null : (deepTarget ? deepBodyAt(x, y) : bodyAt(x, y))
+    const object = bodyHit?.obj
+    const region = nhHit || voyHit || object || deepTarget ? null : beltAt(x, y, false)
+    const hoveredComet = !galaxyView && !voyagerMode && !newHorizonsMode && !phenomenaMode ? cometAt(x, y) : null
+    const caption = hoveredComet
+      ? hoveredComet.el.textContent || hoveredComet.comet.en
+      : nhHit
+        ? nhHit.kind === 'probe'
+          ? pick('新视野号', 'New Horizons')
+          : nhMilestoneShort(nhHit.milestone, locale.value)
+        : voyHit
+          ? voyHit.kind === 'probe'
+            ? missionName(voyHit.id)
+            : milestoneShort(voyHit.milestone, locale.value)
+          : object
+            ? object instanceof Moon
+              ? moonLabel(object)
+              : object instanceof World
+                ? worldName(object)
+                : object.name
+            : region
+              ? regionLabel(region.id)
+              : ''
+    canvas.style.cursor = caption ? 'pointer' : ''
+    if (canvas.title !== caption) canvas.title = caption
+    if (!deepTarget) {
+      hoverPickPoint = pt
+      hoverPickBody = (!nhHit && !voyHit && !deepTarget ? (bodyHit?.obj as World | Moon | typeof sun | null) : null) ?? null
+      hoverPickComet = hoveredComet
+      if (updateOrbitPreview()) requestDraw()
+    }
+  }
   canvas.addEventListener('contextmenu', (e) => e.preventDefault(), { signal: listeners.signal })
   canvas.addEventListener(
     'pointerdown',
     (e) => {
       if (e.button !== 0 && e.button !== 2) return
-      hoverPoint = null
-      requestDraw()
+      updateCanvasRect()
+      clearHoverState(true)
       canvas.style.cursor = ''
       canvas.setPointerCapture(e.pointerId)
       canvas.focus({ preventScroll: true })
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
       canvas.classList.add('dragging')
       panDrag = e.button === 2 || e.shiftKey
-      const box = canvas.getBoundingClientRect()
       tapStart = pointers.size === 1 && !panDrag
-        ? { x: e.clientX, y: e.clientY, comet: cometAt(e.clientX - box.left, e.clientY - box.top) }
+        ? { x: e.clientX, y: e.clientY, comet: cometAt(e.clientX - canvasRect.left, e.clientY - canvasRect.top) }
         : null
       if (pointers.size === 2) {
         lastPair = pairDistance()
@@ -1948,30 +2276,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       const prev = pointers.get(e.pointerId)
       if (!prev) {
         if (e.pointerType === 'mouse' && (!galaxyView || deepTarget) && !pointers.size) {
-          const box = canvas.getBoundingClientRect(),
-            x = e.clientX - box.left,
-            y = e.clientY - box.top
-          hoverPoint = { x, y }
-          requestDraw()
-          const voyHit = deepTarget || galaxyView ? null : voyagerHitAt(x, y)
-          const object = voyHit ? null : (deepTarget ? deepBodyAt(x, y) : bodyAt(x, y))?.obj,
-            region = voyHit || object || deepTarget ? null : beltAt(x, y)
-          const hoveredComet = cometAt(x, y)
-          const caption = hoveredComet ? hoveredComet.el.textContent || hoveredComet.comet.en : voyHit
-            ? voyHit.kind === 'probe'
-              ? missionName(voyHit.id)
-              : milestoneShort(voyHit.milestone, locale.value)
-            : object
-              ? object instanceof Moon
-                ? moonLabel(object)
-                : object instanceof World
-                  ? worldName(object)
-                  : object.name
-              : region
-                ? regionLabel(region.id)
-                : ''
-          canvas.style.cursor = caption ? 'pointer' : ''
-          if (canvas.title !== caption) canvas.title = caption
+          pendingHoverClient = { x: e.clientX, y: e.clientY }
+          if (!hoverFrame) hoverFrame = requestAnimationFrame(flushHover)
         }
         return
       }
@@ -1997,8 +2303,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   canvas.addEventListener(
     'pointerleave',
     () => {
-      hoverPoint = null
-      requestDraw()
+      clearHoverState(true)
     },
     { signal: listeners.signal },
   )
@@ -2023,6 +2328,15 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       const comet = wasTap.comet ?? cometAt(x, y)
       if (comet) {
         openComet(comet.comet.id)
+        return
+      }
+      const nhHit = newHorizonsHitAt(x, y)
+      if (nhHit) {
+        if (nhHit.kind === 'probe') {
+          setNewHorizonsView('probe')
+        } else {
+          jumpNewHorizonsMilestone(nhHit.milestone.id)
+        }
         return
       }
       const voyHit = voyagerHitAt(x, y)
@@ -2108,6 +2422,10 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     { signal: listeners.signal },
   )
   function setPlaying(value: boolean) {
+    if (value && newHorizonsMode && newHorizons && nhYear >= NH_END_YEAR - 1e-5) {
+      nhYear = NH_START_YEAR
+      syncNewHorizonsState(true)
+    }
     if (value && voyagerMode && voyagerYear >= VOYAGER_END_YEAR) {
       voyagerYear = missionStart(ui.voyagerMode)
       syncVoyagerState(true)
@@ -2148,19 +2466,23 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     requestDraw()
   }
   function updateView(changeScale = false, keepDirection = false) {
+    if (!newHorizonsMode) newHorizonsRequest++
     rowPreview = null
-    hoverPoint = null
+    clearHoverState()
     hoveredBody = null
     nearbyHost = null
     ui.galaxy = galaxyView
     ui.voyager = voyagerMode
+    ui.newHorizons = newHorizonsMode
     ui.phenomena = phenomenaMode
     ui.comet = focusComet?.comet ?? null
     ui.planet = focusPlanet
     ui.moon = focusMoon
     ui.region = focusRegion
     ui.deepEntry = null
-    ui.title = galaxyView
+    ui.title = newHorizonsMode
+      ? pick('新视野号', 'New Horizons')
+      : galaxyView
       ? pick('银河系', 'Milky Way')
       : phenomenaMode
         ? phenomenonName(getPhenomenon(phenomenonId))
@@ -2183,18 +2505,24 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
       canvas.animate([{ opacity: 0.24 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' })
     }
   }
-  function openVoyager(milestoneId?: string) {
+  function openVoyager(milestoneId?: string, nextMode?: VoyagerMode) {
     focusComet = null
     if (deepTarget) leaveDeepTarget(false)
     ui.group = '太阳系'
     const wasGalactic = galaxyView
     galaxyView = false
     phenomenaMode = false
+    newHorizonsMode = false
+    nhCustomDistance = null
     focusPlanet = null
     focusMoon = null
     focusRegion = null
     voyagerMode = true
     voyagerCustomDistance = null
+    if (nextMode) {
+      ui.voyagerMode = nextMode
+      if (nextMode !== 'both') ui.voyagerFocus = nextMode
+    }
     setDock(false)
     drawer(false)
     ui.search = ''
@@ -2208,6 +2536,98 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     playing = ui.playing = false
     syncVoyagerState(true)
     updateView(wasGalactic, false)
+  }
+  async function openNewHorizons(milestoneId?: NewHorizonsMilestoneId) {
+    if (excursion) return
+    if (newHorizonsMode && newHorizons) {
+      if (milestoneId) jumpNewHorizonsMilestone(milestoneId)
+      return
+    }
+    const request = ++newHorizonsRequest
+    if (!newHorizons) {
+      const module = await import('./newHorizonsModel').catch((error) => {
+        if (request === newHorizonsRequest && !disposed) throw error
+        return null
+      })
+      if (!module || request !== newHorizonsRequest || disposed || excursion) return
+      newHorizons = module.createNewHorizonsModel(scene, !!renderer, worlds, planets, mapOuterAU, tag)
+      newHorizons.refreshLabels(locale.value)
+      nhEndPoint.copy(newHorizons.ephemeris.sample(NH_END_YEAR, v3()).pos)
+    }
+    if (deepTarget) leaveDeepTarget(false)
+    const wasGalactic = galaxyView
+    galaxyView = false
+    voyagerMode = false
+    phenomenaMode = false
+    voyagerCustomDistance = null
+    focusComet = null
+    focusPlanet = null
+    focusMoon = null
+    focusRegion = null
+    newHorizonsMode = true
+    nhCustomDistance = null
+    ui.group = '太阳系'
+    setDock(false)
+    drawer(false)
+    ui.search = ''
+    if (milestoneId) {
+      jumpNewHorizonsMilestone(milestoneId, wasGalactic)
+      return
+    }
+    nhView = ui.newHorizonsView = 'overview'
+    nhYear = NH_END_YEAR
+    playing = ui.playing = false
+    syncNewHorizonsState(true)
+    updateView(wasGalactic, false)
+    canvas.focus({ preventScroll: true })
+  }
+  function setNewHorizonsYear(year: number, pause = false) {
+    nhYear = clamp(year, NH_START_YEAR, NH_END_YEAR)
+    if (pause) playing = ui.playing = false
+    syncNewHorizonsState(true)
+    requestDraw()
+  }
+  function setNewHorizonsView(view: NewHorizonsView) {
+    if (!newHorizonsMode || !newHorizons) return
+    nhView = ui.newHorizonsView = view
+    nhCustomDistance = null
+    // If jumping to a flyby close-up while far in time, seek smoothly to that encounter!
+    if (view === 'jupiter' && Math.abs(nhYear - NH_JUPITER_YEAR) > 0.35) {
+      nhYear = NH_JUPITER_YEAR
+      playing = ui.playing = false
+    } else if (view === 'pluto' && Math.abs(nhYear - NH_PLUTO_YEAR) > 0.35) {
+      nhYear = NH_PLUTO_YEAR
+      playing = ui.playing = false
+    } else if (view === 'arrokoth' && Math.abs(nhYear - NH_ARROKOTH_YEAR) > 0.35) {
+      nhYear = NH_ARROKOTH_YEAR
+      playing = ui.playing = false
+    }
+    syncNewHorizonsState(true)
+    updateOrbitTargets()
+    aim(true, false)
+    requestDraw()
+  }
+  function jumpNewHorizonsMilestone(id: NewHorizonsMilestoneId, changeScale = false) {
+    const ms = newHorizonsMilestones.find((m) => m.id === id)
+    if (!ms || !newHorizons) return
+    newHorizonsMode = true
+    voyagerMode = false
+    phenomenaMode = false
+    galaxyView = false
+    focusPlanet = null
+    focusMoon = null
+    focusRegion = null
+    nhYear = ms.year
+    playing = ui.playing = false
+    if (id === 'launch') {
+      nhView = ui.newHorizonsView = 'probe'
+      nhCustomDistance = 18
+    } else {
+      nhView = ui.newHorizonsView = ms.defaultView
+      nhCustomDistance = null
+    }
+    syncNewHorizonsState(true)
+    updateView(changeScale, false)
   }
   function setVoyagerMode(mode: VoyagerMode) {
     if (mode === ui.voyagerMode) return
@@ -2250,6 +2670,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (!ms) return
     if (!voyagerMode) {
       voyagerMode = true
+      newHorizonsMode = false
+      nhCustomDistance = null
       phenomenaMode = false
       galaxyView = false
       focusPlanet = null
@@ -2291,7 +2713,9 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     const wasGalactic = galaxyView
     galaxyView = false
     voyagerMode = false
+    newHorizonsMode = false
     voyagerCustomDistance = null
+    nhCustomDistance = null
     focusPlanet = null
     focusMoon = null
     focusRegion = null
@@ -2345,6 +2769,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (!phenomenaMode) {
       phenomenaMode = true
       voyagerMode = false
+      newHorizonsMode = false
+      nhCustomDistance = null
       galaxyView = false
       focusPlanet = null
       focusMoon = null
@@ -2381,7 +2807,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     const track = cometTracks.find(t => t.comet.id === id)
     if (!track) return
     if (!ui.showComets) ui.showComets = true
-    if (deepTarget || galaxyView || voyagerMode || phenomenaMode) openPlanet(null)
+    if (deepTarget || galaxyView || voyagerMode || newHorizonsMode || phenomenaMode) openPlanet(null)
     ui.group = '太阳系'
     track.body.advance(clock)
     focusComet = track
@@ -2398,11 +2824,13 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (deepTarget) leaveDeepTarget(false)
     ui.group = '太阳系'
     const leavingGalaxy = galaxyView
-    const leavingEpochMode = voyagerMode || phenomenaMode
+    const leavingEpochMode = voyagerMode || newHorizonsMode || phenomenaMode
     galaxyView = false
     voyagerMode = false
+    newHorizonsMode = false
     phenomenaMode = false
     voyagerCustomDistance = null
+    nhCustomDistance = null
     focusPlanet = p
     focusMoon = null
     focusRegion = null
@@ -2413,7 +2841,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     updateView(leavingGalaxy, false)
   }
   function openMoon(m: Moon) {
-    if (focusPlanet !== m.parent || galaxyView || voyagerMode || phenomenaMode) openPlanet(m.parent)
+    if (focusPlanet !== m.parent || galaxyView || voyagerMode || newHorizonsMode || phenomenaMode) openPlanet(m.parent)
     if (m.instance !== undefined) updateMinorMoons(m.parent, clock)
     focusPlanet = m.parent
     focusMoon = m
@@ -2426,25 +2854,31 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (deepTarget) leaveDeepTarget(false)
     ui.group = '太阳系'
     const wasGalactic = galaxyView
-    const wasEpochMode = voyagerMode || phenomenaMode
+    const wasEpochMode = voyagerMode || newHorizonsMode || phenomenaMode
     galaxyView = false
     voyagerMode = false
+    newHorizonsMode = false
     phenomenaMode = false
     voyagerCustomDistance = null
+    nhCustomDistance = null
     focusRegion = id
     focusMoon = null
     focusPlanet = null
     if (wasGalactic || wasEpochMode) modelStep(clock)
-    const anchorIds: Record<Belt, string> = {
-      main: 'Ceres',
-      trojan: 'Patroclus',
-      centaur: 'Chariklo',
-      outer: 'Pluto',
-      scattered: 'Gonggong',
+    if (id === 'oort') {
+      regionCenter.set(0, 0, 0)
+    } else {
+      const anchorIds: Record<Exclude<Belt, 'oort'>, string> = {
+        main: 'Ceres',
+        trojan: 'Patroclus',
+        centaur: 'Chariklo',
+        outer: 'Pluto',
+        scattered: 'Gonggong',
+      }
+      const anchorBody =
+        smallBodies.find((p) => p.id === anchorIds[id]) || smallBodies.find((p) => p.region === id)!
+      regionCenter.copy(at || anchorBody.pos)
     }
-    const anchorBody =
-      smallBodies.find((p) => p.id === anchorIds[id]) || smallBodies.find((p) => p.region === id)!
-    regionCenter.copy(at || anchorBody.pos)
     setDock(false)
     ui.search = ''
     updateView(wasGalactic, true)
@@ -2467,7 +2901,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   })
   function positionSkyTargets(markers: Label[] | null) {
     for (const { el, caption, direction } of skyTargets) {
-      const q = markers ? project(skyPoint.copy(direction).multiplyScalar(3800).add(camera.position)) : null
+      const q = markers ? project(skyPoint.copy(direction).multiplyScalar(7800).add(camera.position)) : null
       const visible = !!q && q.x >= 0 && q.x <= width && q.y >= 0 && q.y <= height && visibleFromCamera(skyPoint)
       if (el.hidden === visible) el.hidden = !visible
       if (visible && markers && q) {
@@ -2733,6 +3167,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     d.scene.add(d.background)
     if (!form && renderer) {
       d.sky = new T.Mesh(skyDome.geometry, createCosmicSkyMaterial(0.68))
+      d.sky.frustumCulled = false
       d.sky.renderOrder = -10
       d.sky.rotation.copy(skyDome.rotation)
       d.scene.add(d.sky)
@@ -2748,7 +3183,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     positionSkyTargets(null)
     pickables.length = 0
     solarMarker.hidden = true
-    hoverPoint = null
+    clearHoverState()
     canvas.title = ''
     ui.comet = null
     ui.deepEntry = entry
@@ -2769,6 +3204,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
 
     if (!galaxyView) {
       if (voyagerMode) syncVoyagerState(true)
+      else if (newHorizonsMode) syncNewHorizonsState(true)
       else if (phenomenaMode) syncPhenomenaState(true)
       else modelStep(clock, focusMoon)
     }
@@ -2812,6 +3248,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
   aim(false)
   syncPaths()
   if (renderer && loadTexture) {
+    bakeCosmicSky(renderer)
     loadTexture(sources.Sky, listeners.signal, {}, (texture) => {
       textures.Sky?.dispose()
       textures.Sky = texture
@@ -2829,6 +3266,8 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     listeners.abort()
     observer.disconnect()
     cancelAnimationFrame(frame)
+    cancelAnimationFrame(hoverFrame)
+    newHorizons?.dispose()
     if (deepTarget) {
       disposeDeepModel(deepTarget)
       deepTarget = null
@@ -2837,6 +3276,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     for (const im of Object.values(images)) im.onload = null
     detail.dispose()
     boundaries.dispose()
+    oortBoundaries.dispose()
     phenomena.dispose()
     for (const id of voyagerIds) tracks[id].dispose()
     for (const { body } of cometTracks) body.disposeMaps()
@@ -2879,15 +3319,20 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     if (focusMoon) selectedTag.textContent = moonLabel(focusMoon, lang)
     syncSolarMarker(lang)
     boundaries.refreshLabels(lang)
+    oortBoundaries.refreshLabels(lang)
     phenomena.refreshLabels(lang)
     for (const id of voyagerIds) tracks[id].refreshLabels(lang)
+    newHorizons?.refreshLabels(lang)
     if (voyagerMode) syncVoyagerState(false)
+    if (newHorizonsMode) syncNewHorizonsState(false)
     if (phenomenaMode) syncPhenomenaState(false)
     if (deepTarget) {
       models.refreshLabels(deepTarget, lang)
       refreshDeepControls(lang)
     } else {
-      ui.title = galaxyView
+      ui.title = newHorizonsMode
+        ? pick('新视野号', 'New Horizons', lang)
+        : galaxyView
         ? pick('银河系', 'Milky Way', lang)
         : phenomenaMode
           ? phenomenonName(getPhenomenon(phenomenonId), lang)
@@ -2927,9 +3372,20 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     surfaceDrive: (f: number, r: number, h: number, v: number) => excursion?.drive(f, r, h, v),
     openPlanet,
     openMoon,
+    openComet,
     openRegion,
     openGalaxy,
     openVoyager,
+    openNewHorizons,
+    setNewHorizonsYear,
+    setNewHorizonsView,
+    jumpNewHorizonsMilestone,
+    setNewHorizonsPanel(el: HTMLElement | null) {
+      if (newHorizonsPanel) observer.unobserve(newHorizonsPanel)
+      newHorizonsPanel = el
+      if (el) observer.observe(el)
+      requestDraw()
+    },
     setVoyagerOverlay,
     setVoyagerMode,
     setVoyagerFocus,
@@ -2960,7 +3416,7 @@ export function createAtlas({ canvas, stage, tags, pins }: StageElements, ui: Sc
     goBack: () =>
       deepTarget
         ? leaveDeepTarget(true)
-        : voyagerMode || phenomenaMode
+        : voyagerMode || phenomenaMode || ui.newHorizons
           ? openPlanet(null)
           : openPlanet(focusMoon ? focusPlanet : null),
     visit: (entry: ArchiveEntry) => {

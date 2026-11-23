@@ -15,6 +15,7 @@ import ArchiveDialog from './components/ArchiveDialog.vue'
 import GuideDialog from './components/GuideDialog.vue'
 import SurfaceHud from './components/SurfaceHud.vue'
 import VoyagerHud from './components/VoyagerHud.vue'
+import NewHorizonsHud from './components/NewHorizonsHud.vue'
 import PhenomenaHud from './components/PhenomenaHud.vue'
 import { createAtlas, type Atlas } from './scene/atlas'
 import { createSceneUI } from './scene/ui'
@@ -92,15 +93,28 @@ const inTrappist = computed(() => ui.deepEntry?.id === trappistEntryId)
 const trappistPlanet = computed(() => trappistPlanets.find((p) => p.key === ui.preset))
 function switchScale(event: Event) {
   const value = (event.target as HTMLSelectElement).value
-  if (value === 'voyager') atlas.value?.openVoyager()
+  if (value === 'voyager') openHumanExploration()
   else if (value === 'phenomena') atlas.value?.openPhenomena()
   else if (value === 'trappist') atlas.value?.openTrappistSystem()
   else if (value === 'galaxy') atlas.value?.openGalaxy()
   else atlas.value?.openPlanet(null)
 }
+function openHumanExploration() {
+  if (!ui.deepEntry && (ui.newHorizons || ui.voyager)) return
+  atlas.value?.openVoyager()
+}
+async function openNewHorizons() {
+  try {
+    await atlas.value?.openNewHorizons()
+  } catch {
+    notice.value = pick('新视野号轨迹加载失败，请重试。', 'Unable to load the New Horizons trajectory. Try again.')
+    window.clearTimeout(noticeTimer)
+    noticeTimer = window.setTimeout(() => (notice.value = ''), 4200)
+  }
+}
 const currentSolarEntry = computed(() => {
   const a = atlas.value
-  if (!a || ui.galaxy || ui.voyager || ui.phenomena || ui.deepEntry || ui.region) return null
+  if (!a || ui.galaxy || ui.voyager || ui.newHorizons || ui.phenomena || ui.deepEntry || ui.region) return null
   if (ui.comet) return a.entries.find(e => e.comet === ui.comet) ?? null
   if (!ui.planet) return null
   const id = ui.moon ? `${ui.planet.id}-${ui.moon.name}` : ui.planet.id
@@ -163,7 +177,12 @@ const regionMeta = computed<Record<string, { mode: string; code: string; telemet
           scattered: {
             mode: 'Scattered Disc & Inner Oort',
             code: 'SCATTERED & OORT',
-            telemetry: 'Extreme Detached Zone · 50–1000 AU',
+            telemetry: 'Extreme Detached Zone · beyond 50 AU',
+          },
+          oort: {
+            mode: 'Outer Oort & Hill Sphere',
+            code: 'OORT CLOUD · 1 LY',
+            telemetry: '2,000–150,000 AU · 1 ly & Solar Gravity Limit',
           },
         }
       : {
@@ -190,7 +209,12 @@ const regionMeta = computed<Record<string, { mode: string; code: string; telemet
           scattered: {
             mode: '离散盘与内奥尔特云',
             code: 'SCATTERED & OORT',
-            telemetry: '极远分离天体区 · 50–1000 AU',
+            telemetry: '极远分离天体区 · 50 AU 以外',
+          },
+          oort: {
+            mode: '外奥尔特云与引力边界',
+            code: 'OORT CLOUD · 1 LY',
+            telemetry: '2,000–150,000 AU · 含 1 光年与太阳希尔球',
           },
         },
 )
@@ -206,6 +230,7 @@ const hudModeTag = computed(() => {
   if (ui.deepEntry) return pick('深空三维观测', 'Deep-Sky 3D View')
   if (ui.galaxy) return pick('银河宏观尺度', 'Galactic Scale')
   if (ui.phenomena) return pick('罕见天象演算', 'Rare Phenomenon')
+  if (ui.newHorizons) return pick('深空探测回放', 'Deep Space Mission Replay')
   if (ui.voyager) return pick('星际飞行轨道', 'Interstellar Trajectory')
   if (ui.comet) return pick('彗星跟随观测', 'Comet Tracking')
   if (ui.moon) return pick('卫星近距追踪', 'Moon Tracking')
@@ -222,6 +247,7 @@ const hudCode = computed(() => {
   if (ui.deepEntry) return ui.deepEntry.code.split(' · ')[0]
   if (ui.galaxy) return 'MILKY WAY'
   if (ui.phenomena) return getPhenomenon(ui.phenomenonId).code
+  if (ui.newHorizons) return 'NEW HORIZONS'
   if (ui.voyager) return ui.voyagerMode === 'both' ? 'V1 + V2' : 'VOYAGER ' + ui.voyagerMode.slice(1)
   if (ui.comet) return ui.comet.id
   if (ui.moon) return ui.moon.name.toUpperCase()
@@ -242,6 +268,10 @@ const hudTelemetry = computed(() => {
   if (ui.voyager) {
     const s = ui.voyagerStats
     return `${s.dateLabel} · ${s.sunAU.toFixed(1)} AU · ${formatLightTime(s.lightHours, locale.value)}`
+  }
+  if (ui.newHorizons) {
+    const s = ui.newHorizonsStats
+    return `${s.dateLabel} · ${s.sunAU.toFixed(2)} AU · ${formatLightTime(s.lightHours, locale.value)}`
   }
   if (ui.comet) {
     const c = ui.comet
@@ -279,10 +309,10 @@ const hudTelemetry = computed(() => {
     return `${au}公转 ${days} · 卫星 ${ui.planet.moons.length}`
   }
   if (ui.region) return regionMeta.value[ui.region]?.telemetry ?? ''
-  const smallCount = atlas.value?.smallBodies.length ?? 22
+  const smallCount = atlas.value?.smallBodies.length ?? 25
   return isEn.value
-    ? `8 Planets · ${smallCount} Minor Bodies · 5 Belts · ${totalMoons.value} Moons`
-    : `8 行星 · ${smallCount} 矮行星/小天体 · 5 天体带 · ${totalMoons.value} 卫星`
+    ? `8 Planets · ${smallCount} Minor Bodies · 6 Belts · ${totalMoons.value} Moons`
+    : `8 行星 · ${smallCount} 矮行星/小天体 · 6 天体带 · ${totalMoons.value} 卫星`
 })
 </script>
 <template>
@@ -296,7 +326,9 @@ const hudTelemetry = computed(() => {
         :tabindex="ui.landing ? -1 : 0"
         :aria-hidden="ui.landing ? true : undefined"
         :aria-label="
-          deepEntryView
+          ui.newHorizons
+            ? pick('新视野号三维航线。方向键旋转，加减键缩放，Home 键复位。', 'New Horizons 3D trajectory. Arrow keys to orbit, +/- to zoom, Home to reset.')
+            : deepEntryView
             ? isEn
               ? `${observationTitle} 3D model. Drag to orbit, scroll to zoom.`
               : observationTitle + '三维示意，拖动旋转，滚轮缩放。'
@@ -350,18 +382,18 @@ const hudTelemetry = computed(() => {
 
       <div class="sky-tools">
         <select class="compact-scale" :aria-label="pick('观察尺度', 'View Scale')"
-          :value="inTrappist ? 'trappist' : ui.deepEntry ? 'deep' : ui.galaxy ? 'galaxy' : ui.phenomena ? 'phenomena' : ui.voyager ? 'voyager' : 'solar'" @change="switchScale">
+          :value="inTrappist ? 'trappist' : ui.deepEntry ? 'deep' : ui.galaxy ? 'galaxy' : ui.phenomena ? 'phenomena' : ui.voyager || ui.newHorizons ? 'voyager' : 'solar'" @change="switchScale">
           <option v-if="ui.deepEntry && !inTrappist" disabled value="deep">{{ pick('深空', 'Deep Sky') }}</option>
           <option value="solar">{{ pick('太阳系', 'Solar System') }}</option>
           <option value="phenomena">{{ pick('罕见天象', 'Rare Events') }}</option>
-          <option value="voyager">{{ pick('旅行者计划', 'Voyager') }}</option>
+          <option value="voyager">{{ pick('人类探测', 'Space Missions') }}</option>
           <option value="trappist">TRAPPIST-1</option>
           <option value="galaxy">{{ pick('银河系', 'Milky Way') }}</option>
         </select>
         <div class="scale-switch" role="group" :aria-label="pick('观察尺度', 'View Scale')">
           <button
             id="solarTab"
-            :aria-pressed="!ui.deepEntry && !ui.galaxy && !ui.voyager && !ui.phenomena"
+            :aria-pressed="!ui.deepEntry && !ui.galaxy && !ui.voyager && !ui.newHorizons && !ui.phenomena"
             @click="atlas?.openPlanet(null)"
           >
             <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -386,8 +418,8 @@ const hudTelemetry = computed(() => {
           </button>
           <button
             id="voyagerTab"
-            :aria-pressed="!ui.deepEntry && !ui.galaxy && ui.voyager"
-            @click="atlas?.openVoyager()"
+            :aria-pressed="!ui.deepEntry && !ui.galaxy && (ui.voyager || !!ui.newHorizons)"
+            @click="openHumanExploration"
           >
             <svg class="ui-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M3.2 9.4a5.2 5.2 0 0 1 6.2-6.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
@@ -395,7 +427,7 @@ const hudTelemetry = computed(() => {
               <circle cx="11.4" cy="4.4" r="1.25" fill="currentColor" />
               <path d="M12.2 2.4a3.2 3.2 0 0 1 1.4 1.4" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" opacity="0.7" />
             </svg>
-            <span>{{ pick('旅行者计划', 'Voyager') }}</span>
+            <span>{{ pick('人类探测', 'Space Missions') }}</span>
           </button>
           <button id="trappistTab" :aria-pressed="inTrappist" @click="atlas?.openTrappistSystem()">
             TRAPPIST-1
@@ -568,6 +600,13 @@ const hudTelemetry = computed(() => {
         v-if="atlas && ui.voyager && !ui.deepEntry"
         :atlas="atlas"
         :ui="ui"
+        @open-new-horizons="openNewHorizons"
+      />
+      <NewHorizonsHud
+        v-if="atlas && ui.newHorizons && !ui.deepEntry"
+        :atlas="atlas"
+        :ui="ui"
+        @open-archive="archive?.open($event)"
       />
       <PhenomenaHud
         v-if="atlas && ui.phenomena && !ui.deepEntry"
@@ -689,5 +728,5 @@ const hudTelemetry = computed(() => {
     <NavigationDock v-if="atlas" :atlas="atlas" :ui="ui" />
   </main>
   <ArchiveDialog v-if="atlas" ref="archive" :atlas="atlas" />
-  <GuideDialog ref="guide" />
+  <GuideDialog ref="guide" :small-count="atlas?.smallBodies.length" />
 </template>

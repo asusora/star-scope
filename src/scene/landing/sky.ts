@@ -1,5 +1,5 @@
 import { clamp, seeded, tau } from '../math'
-import { rgb, sunDirection, type Landscape, type Terrain } from './landscape'
+import { landingSunDirection, rgb, type Landscape, type Terrain } from './landscape'
 
 // Latitude-longitude panorama shared by the hardware and software renderers.
 export function makeSky(site: Landscape, terrain: Terrain) {
@@ -12,6 +12,8 @@ export function makeSky(site: Landscape, terrain: Terrain) {
   const horizon = rgb(horizonColor),
     zenith = rgb(zenithColor),
     solar = rgb(sunColor)
+  const sunDir = landingSunDirection(site)
+  const isMars = site.id === 'Mars'
   const airless =
     site.kind === 'craters' || (site.kind === 'ice' && site.id !== 'Titan') || site.id === 'Io'
   const clouds = site.kind === 'alpine' || site.kind === 'cloud'
@@ -31,9 +33,10 @@ export function makeSky(site: Landscape, terrain: Terrain) {
     for (let col = 0; col < canvas.width; col++) {
       const x = cos[col] * flat,
         z = sin[col] * flat,
-        dot = x * sunDirection[0] + y * sunDirection[1] + z * sunDirection[2]
-      const disk = clamp((dot - 0.99986) * 13500, 0, 1)
+        dot = x * sunDir[0] + y * sunDir[1] + z * sunDir[2]
+      const disk = clamp((dot - (isMars ? 0.99993 : 0.99986)) * (isMars ? 22000 : 13500), 0, 1)
       const glow = airless ? 0 : Math.max(0, dot) ** 22 * 0.2 + Math.max(0, dot) ** 650 * 0.34
+      const marsBlue = isMars ? Math.max(0, dot) ** 48 * 0.24 : 0
       let cover = 0,
         lit = 0
       if (clouds && y > 0.015) {
@@ -48,9 +51,11 @@ export function makeSky(site: Landscape, terrain: Terrain) {
         lit = 0.72 + 0.25 * terrain.noise(u - 0.07, v - 0.055)
       }
       const i = (row * canvas.width + col) * 4
+      const blueTint = [0.74, 0.83, 0.96]
       for (let k = 0; k < 3; k++) {
-        const air = base[k] + (solar[k] - base[k]) * Math.min(1, disk + glow)
-        image.data[i + k] = 255 * (air + (lit * solar[k] - air) * cover)
+        let air = base[k] + (solar[k] - base[k]) * Math.min(1, disk + glow)
+        if (marsBlue > 0) air += (blueTint[k] - air) * marsBlue
+        image.data[i + k] = 255 * clamp(air + (lit * solar[k] - air) * cover, 0, 1)
       }
       image.data[i + 3] = 255
     }

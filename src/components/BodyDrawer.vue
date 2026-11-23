@@ -29,7 +29,22 @@ const cometActivityLabel = computed(() => {
   if (a >= 16) return pick('温和升华', 'Sublimating')
   return pick('远日休眠', 'Quiescent')
 })
-const smallBodies = computed(() => atlas.smallBodies.filter((p) => p.region === ui.region))
+const cometDistanceLabel = computed(() => {
+  const d = ui.cometDistanceAU
+  if (d >= 1000) return `${formatNum(Math.round(d))} AU`
+  if (d >= 100) return `${d.toFixed(1)} AU`
+  return `${d.toFixed(2)} AU`
+})
+const oortBodyIds = new Set(['Sedna', 'OF201', 'Leleakuhonua', 'FE72'])
+const smallBodies = computed(() =>
+  ui.region === 'oort'
+    ? atlas.smallBodies.filter((p) => oortBodyIds.has(p.id))
+    : atlas.smallBodies.filter((p) => p.region === ui.region),
+)
+function openProxima() {
+  const entry = atlas.entries.find((e) => e.id === 'proxima')
+  if (entry) atlas.openDeepTarget(entry)
+}
 const moons = computed(() => {
   const q = normalized(ui.search)
   return (
@@ -79,7 +94,7 @@ const returnLabel = computed(() => {
     <p v-if="cometFact" class="comet-fact">{{ cometFact[0] }} · {{ cometFact[1] }}</p>
     <div class="comet-telemetry">
       <span>{{ pick('模拟日距', 'Solar distance') }}</span>
-      <strong>{{ ui.cometDistanceAU.toFixed(2) }} AU</strong>
+      <strong>{{ cometDistanceLabel }}</strong>
     </div>
     <div class="comet-telemetry">
       <span>{{ pick('轨道速率', 'Orbital speed') }}</span>
@@ -108,7 +123,7 @@ const returnLabel = computed(() => {
   <div class="stage-actions">
     <span v-if="ui.comet && !ui.deepEntry" class="comet-tracking-title">{{ ui.title }}</span>
     <button
-      v-if="!ui.galaxy && !ui.voyager && !ui.phenomena && !ui.deepEntry"
+      v-if="!ui.galaxy && !ui.voyager && !ui.newHorizons && !ui.phenomena && !ui.deepEntry"
       id="cometsToggle"
       type="button"
       :aria-pressed="ui.showComets"
@@ -118,7 +133,7 @@ const returnLabel = computed(() => {
       <span class="orbit-toggle-state" aria-hidden="true">{{ ui.showComets ? pick('开', 'On') : pick('关', 'Off') }}</span>
     </button>
     <button
-      v-if="ui.showComets && !ui.galaxy && !ui.voyager && !ui.phenomena && !ui.deepEntry"
+      v-if="ui.showComets && !ui.galaxy && !ui.voyager && !ui.newHorizons && !ui.phenomena && !ui.deepEntry"
       id="cometOrbitsToggle"
       type="button"
       :aria-pressed="ui.cometOrbits"
@@ -127,7 +142,7 @@ const returnLabel = computed(() => {
       <span>{{ pick('彗星轨道', 'Comet Orbits') }}</span>
       <span class="orbit-toggle-state" aria-hidden="true">{{ ui.cometOrbits ? pick('开', 'On') : pick('关', 'Off') }}</span>
     </button>
-    <button id="land" v-if="!ui.galaxy && !ui.deepEntry && !ui.region && !ui.voyager && !ui.phenomena && !ui.comet" @click="atlas.land()">
+    <button id="land" v-if="!ui.galaxy && !ui.deepEntry && !ui.region && !ui.voyager && !ui.newHorizons && !ui.phenomena && !ui.comet" @click="atlas.land()">
       <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <path
           d="M7 2v7.2M4.3 6.7L7 9.4l2.7-2.7M2.6 11.6h8.8"
@@ -169,7 +184,7 @@ const returnLabel = computed(() => {
         {{ currentEntry.probePhotos.length }}
       </span>
     </button>
-    <button id="return" :hidden="!ui.deepEntry && !ui.planet && !ui.region && !ui.voyager && !ui.phenomena && !ui.comet" @click="atlas.goBack()">
+    <button id="return" :hidden="!ui.deepEntry && !ui.planet && !ui.region && !ui.voyager && !ui.newHorizons && !ui.phenomena && !ui.comet" @click="atlas.goBack()">
       <svg class="ui-ico-sm" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <path
           d="M8.8 3.2L5 7l3.8 3.8"
@@ -195,7 +210,9 @@ const returnLabel = computed(() => {
       <span id="catalogType">{{
         ui.region ? pick('区域天体', 'Region') : pick('卫星目录', 'Moons')
       }}</span>
-      <span id="count">{{ ui.planet?.moons.length ?? smallBodies.length }}</span>
+      <span id="count">{{
+        ui.planet?.moons.length ?? (smallBodies.length + (ui.region === 'oort' ? 2 : 0))
+      }}</span>
     </button>
   </div>
   <aside id="drawer" :hidden="!ui.drawerOpen" :aria-label="title">
@@ -237,42 +254,60 @@ const returnLabel = computed(() => {
       />
     </div>
     <div id="moonList" @pointerleave="atlas.preview(null)" @focusout="atlas.preview(null)">
-      <template v-if="ui.region"
-        ><button
-          v-for="p in smallBodies"
-          class="moon-row"
-          :key="p.id"
-          :data-body="p.id"
-          @pointerover="$event.pointerType === 'mouse' && atlas.preview(p)"
-          @focus="atlas.preview(p)"
-          @click="atlas.openPlanet(p)"
+      <template v-if="ui.drawerOpen">
+        <template v-if="ui.region"
+          ><button
+            v-if="ui.region === 'oort'"
+            class="moon-row"
+            data-body="C/2014 UN271"
+            @click="atlas.openComet('C/2014 UN271')"
+          >
+            <span>{{ pick('伯纳迪内利–伯恩斯坦', 'C/2014 UN271') }}</span
+            ><small>{{ pick('奥尔特彗星 · ~42,560 AU', 'Oort Comet · ~42,560 AU') }}</small>
+          </button><button
+            v-for="p in smallBodies"
+            class="moon-row"
+            :key="p.id"
+            :data-body="p.id"
+            @pointerover="$event.pointerType === 'mouse' && atlas.preview(p)"
+            @focus="atlas.preview(p)"
+            @click="atlas.openPlanet(p)"
+          >
+            <span>{{ worldName(p) }}</span
+            ><small>{{ bodySubtitle(p) }}</small>
+          </button><button
+            v-if="ui.region === 'oort'"
+            class="moon-row"
+            data-body="proxima"
+            @click="openProxima()"
+          >
+            <span>{{ pick('比邻星', 'Proxima Centauri') }}</span
+            ><small>{{ pick('最近恒星 · 4.24 光年', 'Nearest Star · 4.24 ly') }}</small>
+          </button></template
         >
-          <span>{{ worldName(p) }}</span
-          ><small>{{ bodySubtitle(p) }}</small>
-        </button></template
-      >
-      <template v-else
-        ><button
-          v-for="m in moons"
-          class="moon-row"
-          :key="m.index"
-          :data-index="m.index"
-          :aria-pressed="m === ui.moon"
-          @pointerover="$event.pointerType === 'mouse' && atlas.preview(m)"
-          @focus="atlas.preview(m)"
-          @click="atlas.openMoon(m)"
+        <template v-else
+          ><button
+            v-for="m in moons"
+            class="moon-row"
+            :key="m.index"
+            :data-index="m.index"
+            :aria-pressed="m === ui.moon"
+            @pointerover="$event.pointerType === 'mouse' && atlas.preview(m)"
+            @focus="atlas.preview(m)"
+            @click="atlas.openMoon(m)"
+          >
+            <span>{{ moonLabel(m) }}</span
+            ><small>{{ moonRowSub(m) }}</small>
+          </button>
+          <p v-if="!moons.length" class="empty">
+            {{
+              ui.planet?.moons.length
+                ? pick('没有匹配的卫星。', 'No matching moons.')
+                : pick('该天体目前没有已知天然卫星。', 'No known natural satellites.')
+            }}
+          </p></template
         >
-          <span>{{ moonLabel(m) }}</span
-          ><small>{{ moonRowSub(m) }}</small>
-        </button>
-        <p v-if="!moons.length" class="empty">
-          {{
-            ui.planet?.moons.length
-              ? pick('没有匹配的卫星。', 'No matching moons.')
-              : pick('该天体目前没有已知天然卫星。', 'No known natural satellites.')
-          }}
-        </p></template
-      >
+      </template>
     </div>
     <div id="detail" aria-live="polite" :hidden="!ui.moon">
       <template v-if="ui.moon">

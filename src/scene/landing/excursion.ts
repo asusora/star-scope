@@ -75,8 +75,10 @@ export function createExcursion(
           cos = Math.cos(pose.heading)
         const x = pose.x + (sine * forward + cos * right) * speed,
           z = pose.z + (-cos * forward + sine * right) * speed
-        if (cloud || walkable(x, pose.z, site.seed)) pose.x = x
-        if (cloud || walkable(pose.x, z, site.seed)) pose.z = z
+        const canWalk = (nx: number, nz: number) =>
+          cloud || (view.walkableAt ? view.walkableAt(nx, nz) : walkable(nx, nz, site.seed))
+        if (canWalk(x, pose.z)) pose.x = x
+        if (canWalk(pose.x, z)) pose.z = z
       }
       pose.y = terrain.height(pose.x, pose.z) + altitude
       view.draw({ ...pose, pitch: pose.pitch - 0.48 * (1 - descent) ** 2 }, width, height, elapsed)

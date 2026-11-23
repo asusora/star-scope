@@ -232,9 +232,7 @@ uniform float uOuterRadius;
 uniform float uTime;
 varying vec3 vWorldPos;
 
-float coronaStreamers(vec3 dir, float t) {
-  float c1 = cos(t * 0.038);
-  float s1 = sin(t * 0.038);
+float coronaStreamers(vec3 dir, float c1, float s1, float t) {
   vec3 p = vec3(dir.x * c1 - dir.z * s1, dir.y, dir.x * s1 + dir.z * c1);
   float w1 = sin(p.x * 4.8 + p.y * 3.9 + t * 0.12) * cos(p.z * 5.2 - p.y * 3.1 - t * 0.09);
   float w2 = sin(p.y * 8.6 - p.z * 7.2 + t * 0.16) * cos(p.x * 7.8 + p.y * 5.6);
@@ -282,6 +280,8 @@ void main() {
   float accInner = 0.0;
   float accMid = 0.0;
   float accOuter = 0.0;
+  float rotC = cos(uTime * 0.038);
+  float rotS = sin(uTime * 0.038);
 
   for (int i = 0; i < STEPS; i++) {
     float t = t0 + (float(i) + 0.5) * dt;
@@ -293,7 +293,7 @@ void main() {
     float edgeWin = 1.0 - smoothstep(0.0, maxU, u);
     edgeWin *= edgeWin;
 
-    float streamer = coronaStreamers(P / max(r, 1e-4), uTime);
+    float streamer = coronaStreamers(P / max(r, 1e-4), rotC, rotS, uTime);
     float modS = mix(1.0, streamer, smoothstep(0.06, 0.85, u) * 0.82);
 
     accInner += exp(-5.2 * u) * edgeWin * dtNorm;
@@ -319,22 +319,15 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`
 
-export const cosmicSkyVertex = `
+export const cosmicSkyBakeVertex = `
 varying vec2 vUv;
-varying vec3 vDir;
 void main() {
   vUv = uv;
-  vDir = normalize(position);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = vec4(position.xy, 0.0, 1.0);
 }`
 
-export const cosmicSkyFragment = `
-uniform sampler2D uSkyMap;
-uniform float uHasSkyMap;
-uniform float uTime;
-uniform float uOpacity;
+export const cosmicSkyBakeFragment = `
 varying vec2 vUv;
-varying vec3 vDir;
 
 float hash31(vec3 p) {
   p = fract(p * 0.1031);
@@ -373,6 +366,43 @@ float fbm3(vec3 p) {
 }
 
 void main() {
+  float phi = vUv.x * 6.28318530718;
+  float theta = (1.0 - vUv.y) * 3.14159265359;
+  float sinT = sin(theta);
+  vec3 d = vec3(-cos(phi) * sinT, cos(theta), sin(phi) * sinT);
+  float nLarge = fbm3(d * 2.8);
+  float nDetail = fbm3(d * 6.8 + vec3(nLarge * 1.35));
+  float dustRift = smoothstep(0.42, 0.74, fbm3(d * 5.2 + vec3(4.2, -1.7, 2.8)));
+  gl_FragColor = vec4(nLarge, nDetail, dustRift, 1.0);
+}`
+
+export const cosmicSkyVertex = `
+varying vec2 vUv;
+varying vec3 vDir;
+void main() {
+  vUv = uv;
+  vDir = normalize(position);
+  vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = clip.xyww;
+}`
+
+export const cosmicSkyFragment = `
+uniform sampler2D uSkyMap;
+uniform sampler2D uNebulaMap;
+uniform float uHasSkyMap;
+uniform float uHasNebulaMap;
+uniform float uTime;
+uniform float uOpacity;
+varying vec2 vUv;
+varying vec3 vDir;
+
+float hash31(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+void main() {
   vec3 d = normalize(vDir);
   // Deep cosmic void base with subtle vertical sapphire depth
   float band = exp(-pow(d.y * 3.1, 2.0));
@@ -380,11 +410,15 @@ void main() {
 
   vec3 baseVoid = mix(vec3(0.011, 0.018, 0.036), vec3(0.020, 0.036, 0.068), band);
 
-  // Procedural multi-scale nebula wisps & dark dust rifts (infinite resolution, never pixelated)
-  vec3 drift = vec3(uTime * 0.0022, -uTime * 0.0011, uTime * 0.0016);
-  float nLarge = fbm3(d * 2.8 + drift);
-  float nDetail = fbm3(d * 6.8 - drift * 1.4 + vec3(nLarge * 1.35));
-  float dustRift = smoothstep(0.42, 0.74, fbm3(d * 5.2 + vec3(4.2, -1.7, 2.8)));
+  // Sample pre-baked multi-scale 3D fBm nebula fields with continuous seamless drift
+  float nLarge = 0.5;
+  float nDetail = 0.5;
+  float dustRift = 0.0;
+  if (uHasNebulaMap > 0.5) {
+    nLarge = texture2D(uNebulaMap, vec2(fract(vUv.x + uTime * 0.00035), vUv.y)).r;
+    nDetail = texture2D(uNebulaMap, vec2(fract(vUv.x - uTime * 0.00048), vUv.y)).g;
+    dustRift = texture2D(uNebulaMap, vUv).b;
+  }
 
   float breatheA = 0.92 + 0.08 * sin(uTime * 0.16 + nLarge * 5.5);
   float breatheB = 0.92 + 0.08 * cos(uTime * 0.13 + nDetail * 4.8);
@@ -524,8 +558,8 @@ void main() {
   vec3 travel = normalize(-aStartDir * sin(s) + aTangent * cos(s));
   vec3 sideVec = normalize(cross(dir, travel));
 
-  float halfWidth = mix(0.65, 3.0, aCorner.x);
-  vec3 localPos = dir * 1920.0 + sideVec * (aCorner.y * halfWidth);
+  float halfWidth = mix(2.2, 10.0, aCorner.x);
+  vec3 localPos = dir * 6800.0 + sideVec * (aCorner.y * halfWidth);
 
   vAlpha = envelope;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(localPos, 1.0);

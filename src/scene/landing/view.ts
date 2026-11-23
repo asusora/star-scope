@@ -4,8 +4,9 @@ import screeUrl from '../../assets/landing/scree.jpg'
 import cloudUrl from '../../assets/landing/cloud-banks.jpg'
 import wispUrl from '../../assets/landing/cloud-wisp.webp'
 import { seeded } from '../math'
-import { rgb, type Landscape, type Terrain } from './landscape'
+import { isRealisticSite, rgb, type Landscape, type Terrain } from './landscape'
 import { buildPatch, type SurfaceMesh } from './ground'
+import { createRealisticSurface } from './realisticSurface'
 import { makeSky } from './sky'
 import { createSoftwareLandscape, verticalFov, type SurfacePose } from './software'
 
@@ -16,6 +17,9 @@ export function createLandscapeView(
   ctx: CanvasRenderingContext2D | null,
   requestDraw: () => void,
 ) {
+  if (renderer && isRealisticSite(site)) {
+    return createRealisticSurface(site, terrain, renderer, requestDraw)
+  }
   const sky = makeSky(site, terrain),
     cloud = site.kind === 'cloud'
   const fog = rgb(site.palette[2])
@@ -177,5 +181,5 @@ export function createLandscapeView(
     wispMap?.dispose()
     scene.clear()
   }
-  return { draw, dispose }
+  return { draw, dispose, walkableAt: undefined as ((x: number, z: number) => boolean) | undefined }
 }

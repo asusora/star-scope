@@ -1,8 +1,13 @@
 import type { Comet } from '../data/comets'
 import type * as T from 'three'
 import type { Orbit } from './math'
+import type {
+  NewHorizonsMilestoneId,
+  NewHorizonsStats,
+  NewHorizonsView,
+} from '../data/newHorizons'
 
-export type Belt = 'main' | 'trojan' | 'centaur' | 'outer' | 'scattered'
+export type Belt = 'main' | 'trojan' | 'centaur' | 'outer' | 'scattered' | 'oort'
 export type OrbitMode = 'smart' | 'all' | 'off'
 export type VoyagerId = 'v1' | 'v2'
 export type VoyagerMode = VoyagerId | 'both'
@@ -204,6 +209,11 @@ export interface SceneUI {
   title: string
   galaxy: boolean
   voyager: boolean
+  newHorizons: boolean
+  newHorizonsYear: number
+  newHorizonsView: NewHorizonsView
+  newHorizonsMilestone: NewHorizonsMilestoneId
+  newHorizonsStats: NewHorizonsStats
   phenomena: boolean
   phenomenonId: PhenomenonId
   phenomenonYear: number

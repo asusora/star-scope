@@ -82,6 +82,7 @@ export function regionLabel(region: Belt, lang: Locale = locale.value): string {
     centaur: ['半人马小天体带', 'Centaur Belt'],
     outer: ['柯伊伯带', 'Kuiper Belt'],
     scattered: ['离散盘与内奥尔特云', 'Scattered Disc & Inner Oort'],
+    oort: ['外奥尔特云', 'Outer Oort Cloud'],
   }
   return pick(map[region][0], map[region][1], lang)
 }
@@ -93,6 +94,7 @@ export function regionDrawerTitle(region: Belt, lang: Locale = locale.value): st
     centaur: ['半人马小天体带', 'Centaur Bodies'],
     outer: ['柯伊伯带天体', 'Kuiper Belt Objects'],
     scattered: ['离散盘与极远天体', 'Scattered & Extreme Bodies'],
+    oort: ['奥尔特云与边界地标', 'Oort Cloud & Frontier'],
   }
   return pick(map[region][0], map[region][1], lang)
 }
@@ -103,7 +105,8 @@ export function regionFullLabel(region: Belt, lang: Locale = locale.value): stri
     trojan: ['木星特洛伊群（L4/L5 共轨区）', 'Jupiter Trojans (L4/L5 Co-orbital)'],
     centaur: ['半人马小天体带（巨行星之间）', 'Centaur Belt (Between Giant Planets)'],
     outer: ['柯伊伯带（海王星外 30–50 AU）', 'Kuiper Belt (30–50 AU beyond Neptune)'],
-    scattered: ['离散盘与内奥尔特云（50–1000 AU）', 'Scattered Disc & Inner Oort (50–1000 AU)'],
+    scattered: ['离散盘与内奥尔特云（50 AU 以外）', 'Scattered Disc & Inner Oort (beyond 50 AU)'],
+    oort: ['外奥尔特云与引力边界（2,000–150,000 AU）', 'Outer Oort & Hill Sphere (2,000–150,000 AU)'],
   }
   return pick(map[region][0], map[region][1], lang)
 }

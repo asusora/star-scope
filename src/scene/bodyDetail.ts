@@ -1235,6 +1235,79 @@ const curatedSpecs: Record<string, BodyDetailSpec> = {
     lineae: makeLineaeSet(9037, 8, [0.008, 0.017], [0.14, 0.24], [0.78, 0.56, 0.48]),
   },
 
+  // Illustrative relief for unresolved trans-Neptunian objects. Large landmarks
+  // are shared by the mesh and the baked albedo, normal and specular maps.
+  OF201: {
+    id: 'OF201',
+    seed: 2017201,
+    customShape: true,
+    scaleXYZ: [1.01, 0.985, 1],
+    roughness: 0.018,
+    geoCraterCount: 5,
+    specialCraters: [
+      { dir: norm3(-0.42, 0.28, 0.86), radius: 0.40, depth: 0.035, peak: 0.008,
+        rim: 0.24, floorTint: [0.88, 0.86, 0.82] },
+      { dir: norm3(0.48, -0.58, 0.65), radius: 0.16, depth: 0.025, rim: 0.34 },
+    ],
+    texCraterCount: 84, craterMinRad: 0.012, craterMaxRad: 0.08, craterDepthScale: 0.22,
+    baseColor: [0.66, 0.63, 0.62], highColor: [0.89, 0.87, 0.84], lowColor: [0.39, 0.36, 0.41],
+    patches: [
+      { dir: norm3(-0.46, 0.25, 0.85), radius: 0.51, softness: 0.46, noiseMix: 0.62,
+        color: [0.84, 0.82, 0.78], gloss: 0.36 },
+      { dir: norm3(0.62, -0.45, -0.64), radius: 0.76, softness: 0.67, noiseMix: 0.56,
+        color: [0.49, 0.40, 0.37], gloss: 0.1 },
+    ],
+    lineae: [
+      { normal: norm3(0.81, 0.52, 0.27), arcCenter: norm3(-0.45, 0.29, 0.84),
+        arcLimit: 0.82, wobble: 0.14, seed: 201, width: 0.008, depth: 0.09, color: [0.55, 0.52, 0.54] },
+      { normal: norm3(0.54, 0.82, 0.16), arcCenter: norm3(-0.46, 0.14, 0.88),
+        arcLimit: 0.90, wobble: 0.10, seed: 202, width: 0.006, depth: 0.07, color: [0.59, 0.56, 0.57] },
+      { normal: norm3(0.21, -0.93, 0.30), arcCenter: norm3(0.70, -0.04, -0.71),
+        arcLimit: 0.74, wobble: 0.16, seed: 203, width: 0.009, depth: 0.10, color: [0.50, 0.46, 0.47] },
+    ],
+    macroFreq: 2.2, detailFreq: 13, ridgeMix: 0.24, noiseContrast: 0.42,
+    microRoughness: 0.16, normalStrength: 1.25, baseGloss: 0.18, iceGlossBoost: 0.32,
+  },
+  Leleakuhonua: {
+    id: 'Leleakuhonua',
+    seed: 541132,
+    customShape: true,
+    scaleXYZ: [1.10, 0.94, 0.98],
+    roughness: 0.048,
+    grooves: { axis: [0.39, 0.90, -0.18], freq: 27, depth: 0.022, latBand: [-0.52, 0.32] },
+    geoCraterCount: 9,
+    specialCraters: [
+      { dir: norm3(-0.53, -0.21, 0.82), radius: 0.25, depth: 0.046, rim: 0.26 },
+      { dir: norm3(0.68, 0.44, -0.57), radius: 0.29, depth: 0.040, rim: 0.31 },
+    ],
+    texCraterCount: 96, craterMinRad: 0.015, craterMaxRad: 0.11, craterDepthScale: 0.28,
+    baseColor: [0.58, 0.36, 0.29], highColor: [0.80, 0.61, 0.48], lowColor: [0.31, 0.18, 0.17],
+    patches: [
+      { dir: norm3(0.34, 0.79, 0.51), radius: 0.60, softness: 0.55, noiseMix: 0.60,
+        color: [0.74, 0.62, 0.54], gloss: 0.24 },
+    ],
+    macroFreq: 3.3, detailFreq: 15, ridgeMix: 0.51, noiseContrast: 0.50,
+    microRoughness: 0.24, normalStrength: 1.55, baseGloss: 0.14,
+  },
+  FE72: {
+    id: 'FE72',
+    seed: 201472,
+    customShape: true,
+    scaleXYZ: [1.19, 0.84, 0.96],
+    roughness: 0.085, facetStrength: 0.09,
+    geoCraterCount: 17,
+    specialCraters: [
+      { dir: norm3(0.15, 0.14, 0.98), radius: 0.32, depth: 0.084, peak: 0.022, rim: 0.40 },
+      { dir: norm3(-0.24, 0.28, 0.93), radius: 0.20, depth: 0.051, rim: 0.35 },
+      { dir: norm3(-0.62, -0.48, -0.62), radius: 0.27, depth: 0.063, rim: 0.33 },
+    ],
+    texCraterCount: 168, craterMinRad: 0.012, craterMaxRad: 0.12, craterDepthScale: 0.38,
+    darkCraterFloor: 0.18, brightRayFraction: 0.05,
+    baseColor: [0.45, 0.44, 0.47], highColor: [0.67, 0.65, 0.64], lowColor: [0.25, 0.24, 0.27],
+    macroFreq: 3.8, detailFreq: 17, ridgeMix: 0.46, noiseContrast: 0.49,
+    microRoughness: 0.34, normalStrength: 1.72, baseGloss: 0.06,
+  },
+
   // ======================= MARS MOONS =======================
   Phobos: {
     id: 'Phobos',
@@ -2752,10 +2825,10 @@ export function buildMinorInstancedGeometry(): T.BufferGeometry {
 }
 
 export interface SynthesizedMaps {
-  albedo: T.CanvasTexture
-  normal: T.CanvasTexture
-  specular: T.CanvasTexture | null
-  emissive: T.CanvasTexture | null
+  albedo: T.Texture
+  normal: T.Texture
+  specular: T.Texture | null
+  emissive: T.Texture | null
   albedoPixels?: ImageData
   normalPixels?: ImageData
   emissivePixels?: ImageData
@@ -3700,14 +3773,16 @@ export function texturesFromPixels(
   keepPixels: boolean,
 ): SynthesizedMaps {
   function texture(image: ImageData, space: T.ColorSpace) {
-    const canvas = document.createElement('canvas')
-    canvas.width = image.width
-    canvas.height = image.height
-    canvas.getContext('2d')!.putImageData(image, 0, 0)
-    const map = new T.CanvasTexture(canvas)
+    const view = new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength)
+    const map = new T.DataTexture(view, image.width, image.height, T.RGBAFormat)
     map.colorSpace = space
     map.wrapS = T.RepeatWrapping
     map.anisotropy = maxAnisotropy
+    map.flipY = true
+    map.generateMipmaps = true
+    map.magFilter = T.LinearFilter
+    map.minFilter = T.LinearMipmapLinearFilter
+    map.needsUpdate = true
     return map
   }
   const albedo = texture(pixels.albedo, T.SRGBColorSpace)
@@ -3800,8 +3875,32 @@ export function synthesizeBodyMapsSync(
 
 /** Extracts ImageData from an existing loaded Three.js Texture's image, if available. */
 export function extractTexturePixels(texture: T.Texture | null, maxW = 512): ImageData | null {
-  const img = texture?.image as HTMLImageElement | HTMLCanvasElement | undefined
+  const img = texture?.image as
+    | HTMLImageElement
+    | HTMLCanvasElement
+    | { data: Uint8Array | Uint8ClampedArray; width: number; height: number }
+    | undefined
   if (!img) return null
+  if ('data' in img) {
+    if (!(img.data instanceof Uint8Array || img.data instanceof Uint8ClampedArray)) return null
+    const iw = img.width
+    const ih = img.height
+    if (!iw || !ih) return null
+    const raw = new ImageData(new Uint8ClampedArray(img.data), iw, ih)
+    if (iw <= maxW) return raw
+    const src = document.createElement('canvas')
+    src.width = iw
+    src.height = ih
+    src.getContext('2d')!.putImageData(raw, 0, 0)
+    const w = maxW
+    const h = Math.max(1, Math.round((ih * w) / iw))
+    const dst = document.createElement('canvas')
+    dst.width = w
+    dst.height = h
+    const k = dst.getContext('2d')!
+    k.drawImage(src, 0, 0, w, h)
+    return k.getImageData(0, 0, w, h)
+  }
   const iw = 'naturalWidth' in img ? img.naturalWidth : img.width
   const ih = 'naturalHeight' in img ? img.naturalHeight : img.height
   if (!iw || !ih) return null

@@ -2,6 +2,7 @@
 import { useTemplateRef } from 'vue'
 import { isEn, pick } from '../i18n'
 
+defineProps<{ smallCount?: number }>()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 defineExpose({ open: () => dialog.value?.showModal() })
 </script>
@@ -30,7 +31,9 @@ defineExpose({ open: () => dialog.value?.showModal() })
         target.
       </p>
       <p>
-        Switch between the Solar System, Rare Phenomena, Voyager, TRAPPIST-1 and the Milky Way at top right.
+        Switch between the Solar System, Rare Phenomena, Space Missions, TRAPPIST-1 and the Milky Way at top right.
+        In Space Missions, select New Horizons to replay its reconstructed trajectory. Select a flyby to see
+        the distance from the target's center and open spacecraft photos of Pluto or Arrokoth.
         In Rare Phenomena, explore live epoch simulations of the 1982 Nine-Planet Alignment, 1994 Comet Shoemaker–Levy 9 Jupiter impacts, 2020 Great Conjunction, and 2017 interstellar visitor 1I/ʻOumuamua—click any year milestone to start real-time simulation and pause anytime to orbit and inspect in 3D.
         In TRAPPIST-1, select b through h to follow a planet and read its orbital parameters. Open “Notes” for curated
         astronomy commentary, and click scene pins to switch topics. Clicking the Solar System
@@ -43,11 +46,12 @@ defineExpose({ open: () => dialog.value?.showModal() })
         imagery, spacecraft photographs, and primary sources.
       </p>
       <p>
-        The Solar System overview spans all eight planets, 22 major dwarf planets and minor bodies,
-        and five regions: the Main Asteroid Belt (with the Hilda group), Jupiter Trojans (L4/L5),
-        the Centaur Belt, the Kuiper Belt, and the Scattered Disc / Inner Oort zone. Click any belt
-        or select it from the dock to browse representative worlds; zoom out to inspect extreme
-        elliptical orbits like Sedna.
+        The Solar System overview spans all eight planets, {{ smallCount }} dwarf planets and minor bodies,
+        and six outer zones: the Main Asteroid Belt (with the Hilda group), Jupiter Trojans (L4/L5),
+        the Centaur Belt, the Kuiper Belt, the Scattered Disc / Inner Oort zone, and the spherical Outer
+        Oort Cloud extending across 1 light-year (63,241 AU) to the ~150,000 AU Solar Hill sphere and the
+        direction of Proxima Centauri. Click any belt or select it from the dock to browse representative
+        worlds; zoom out to inspect extreme elliptical orbits like Sedna and comet C/2014 UN271.
       </p>
       <p>
         Switch orbit display modes in the dock. Smart mode keeps only the eight planetary orbits
@@ -72,14 +76,15 @@ defineExpose({ open: () => dialog.value?.showModal() })
         >
       </p>
       <p>
-        Includes 8 planets, 22 representative dwarf planets and minor bodies (across the Main Belt,
+        Includes 8 planets, {{ smallCount }} representative dwarf planets and minor bodies (across the Main Belt,
         Jupiter Trojans, Centaurs, Kuiper Belt, Scattered Disc, and detached Inner Oort Cloud), and
         470 known natural satellites. Sizes, orbital distances, and periods are logarithmically and
         piecewise scaled for clarity; moons can be searched by name, Roman numeral, or provisional
         designation.
       </p>
       <p>
-        Galaxy markers show the catalogue directions in the illustrative starfield. The three comets
+        Galaxy markers show the catalogue directions in the illustrative starfield. The four comets
+        (Halley, Encke, Hale–Bopp, and giant Oort Cloud comet C/2014 UN271 Bernardinelli–Bernstein)
         follow paths derived from their JPL orbital elements. Playback uses compressed periods and
         illustrative starting positions. Their tails grow as they approach the Sun.
         <a href="https://simbad.cds.unistra.fr/simbad/" target="_blank" rel="noopener">SIMBAD galaxy positions ↗</a> ·
@@ -203,13 +208,13 @@ defineExpose({ open: () => dialog.value?.showModal() })
         加拖动平移。滚轮向指针所指的区域缩放；触屏上双指捏合缩放、双指同向拖动平移。复位键可回到当前目标。
       </p>
       <p>
-        从右上角切换太阳系、罕见天象、旅行者计划、TRAPPIST-1 与银河系。在「罕见天象」中可实时演算 1982 九星连珠、1994 彗星撞击木星（苏梅克-列维 9 号）、2020 土木大合与 2017 星际访客奥陌陌——点击任意年份节点即刻实时演算，并可随时暂停自由环绕观察。在 TRAPPIST-1 全景中点选 b 至 h，可跟随对应行星并查看轨道参数。点“注释”查看当前视图的天文说明，点图中的标记可切换讲解。银河系中的太阳系标记可带你回到行星轨道。
+        从右上角切换太阳系、罕见天象、人类探测、TRAPPIST-1 与银河系。在「人类探测」中，选择新视野号可回放重建轨迹，点击飞掠节点可查看距目标中心的距离，以及冥王星或阿罗科斯的探测器实拍。在「罕见天象」中可实时演算 1982 九星连珠、1994 彗星撞击木星（苏梅克-列维 9 号）、2020 土木大合与 2017 星际访客奥陌陌——点击任意年份节点即刻实时演算，并可随时暂停自由环绕观察。在 TRAPPIST-1 全景中点选 b 至 h，可跟随对应行星并查看轨道参数。点“注释”查看当前视图的天文说明，点图中的标记可切换讲解。银河系中的太阳系标记可带你回到行星轨道。
       </p>
       <p>
         展开「天体导航」并点选天体，即可进入它的三维视图。拖动环绕，滚动或双指缩放。星系可切换俯视、侧视；系外行星可切换特写和系统全景。「原图与资料」保留观测影像、艺术想象图与来源。
       </p>
       <p>
-        全景中可见八大行星、各大矮行星、半人马天体与极远天体，以及主小行星带（含希尔达族）、木星特洛伊群（L4/L5）、半人马小天体带、柯伊伯带与离散盘/内奥尔特云。点击任意小天体带或从导航进入，可浏览其代表天体；拉远视角可完整观察赛德娜等极远天体的椭圆轨道。
+        全景中可见八大行星、各大矮行星、半人马天体与极远天体，以及主小行星带（含希尔达族）、木星特洛伊群（L4/L5）、半人马小天体带、柯伊伯带、离散盘/内奥尔特云与球壳状外奥尔特云（含 1,000 AU、10,000 AU、1 光年与约 150,000 AU 太阳希尔球边界及比邻星方向标）。点击任意小天体带或从导航进入，可浏览其代表天体；拉远视角可完整观察赛德娜、2014 FE72 与巨型奥尔特云彗星 C/2014 UN271 的狭长轨道。
       </p>
       <p>
         底部导航可切换轨道显示。智能模式下始终只保留太阳系八大行星轨道，不会因拉近视角而铺满轨道线；仅当鼠标悬停、放大靠近或点击选中具体矮行星/小天体与卫星时，才单独亮起它的轨道。选择「全部」可一次性显示全部收录天体的轨道，「关闭」可只看天体。
@@ -231,10 +236,10 @@ defineExpose({ open: () => dialog.value?.showModal() })
         >
       </p>
       <p>
-        收录八大行星、22 颗代表性矮行星与小天体（涵括主小行星带、木星特洛伊群、巨行星间的半人马小天体带、柯伊伯带、离散盘及内奥尔特云分离天体），以及这些天体的 470 颗已知天然卫星。天体大小、轨道间距及周期差异经科学分段/对数缩放以便同屏观察，卫星可按常用译名、英文名或编号检索。
+        收录八大行星、{{ smallCount }} 颗代表性矮行星与小天体（涵括主小行星带、木星特洛伊群、巨行星间的半人马小天体带、柯伊伯带、离散盘及内奥尔特云分离天体），以及这些天体的 470 颗已知天然卫星。天体大小、轨道间距及周期差异经科学分段/对数缩放以便同屏观察，卫星可按常用译名、英文名或编号检索。
       </p>
       <p>
-        星空背景为示意，星系标记按星表方位定位。哈雷、恩克和海尔–波普彗星沿 JPL 轨道根数确定的路径运动，越接近太阳，彗尾越明显。起始位置与播放周期按演示需要设置。
+        星空背景为示意，星系标记按星表方位定位。哈雷、恩克、海尔–波普与巨型外奥尔特云彗星 C/2014 UN271（伯纳迪内利–伯恩斯坦）沿 JPL 轨道根数确定的路径运动，越接近太阳，彗尾越明显。起始位置与播放周期按演示需要设置。
         <a href="https://simbad.cds.unistra.fr/simbad/" target="_blank" rel="noopener">SIMBAD 星系坐标 ↗</a> ·
         <a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html" target="_blank" rel="noopener">JPL 彗星轨道 ↗</a>
       </p>

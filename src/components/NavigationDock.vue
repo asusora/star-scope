@@ -25,6 +25,7 @@ const beltZones = computed<{ id: Belt; label: string }[]>(() => [
   { id: 'centaur', label: pick('半人马带', 'Centaurs') },
   { id: 'outer', label: pick('柯伊伯带', 'Kuiper Belt') },
   { id: 'scattered', label: pick('离散盘 · 极远', 'Scattered') },
+  { id: 'oort', label: pick('奥尔特云', 'Oort Cloud') },
 ])
 const smallStrip = computed(() =>
   [...atlas.smallBodies].sort((a, b) => (a.au ?? 0) - (b.au ?? 0)),
@@ -248,7 +249,7 @@ function touchEnd(event: TouchEvent) {
             @click="atlas.openPlanet(planet)"
           >
             <span class="planet-thumb">
-              <img :src="thumbs[planet.id]" alt="" />
+              <img :src="thumbs[planet.id]" alt="" loading="lazy" decoding="async" />
             </span>
             <span class="dest-meta"
               ><b>{{ worldName(planet) }}</b
@@ -276,7 +277,7 @@ function touchEnd(event: TouchEvent) {
             @click="atlas.openPlanet(body)"
           >
             <span class="small-thumb">
-              <img v-if="thumbs[body.id]" :src="thumbs[body.id]" alt="" />
+              <img v-if="thumbs[body.id]" :src="thumbs[body.id]" alt="" loading="lazy" decoding="async" />
               <span v-else class="small-dot" aria-hidden="true"></span>
             </span>
             <span class="small-meta"
@@ -303,7 +304,7 @@ function touchEnd(event: TouchEvent) {
           :aria-pressed="ui.deepEntry === entry"
           @click="atlas.openDeepTarget(entry)"
         >
-          <img :src="entry.photo" alt="" /><span class="deep-name"
+          <img :src="entry.photo" alt="" loading="lazy" decoding="async" /><span class="deep-name"
             ><b>{{ localizedEntry(entry).title }}</b
             ><small>{{ entry.code.split(' · ')[0] }}</small></span
           >

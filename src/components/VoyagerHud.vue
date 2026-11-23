@@ -19,6 +19,7 @@ import { tritonEncounter } from '../data/voyagerNeptune'
 import { isEn, locale, pick } from '../i18n'
 
 const { atlas, ui } = defineProps<{ atlas: Atlas; ui: SceneUI }>()
+const emit = defineEmits<{ 'open-new-horizons': [] }>()
 const collapsed = ref(false)
 const speeds = [0.25, 0.5, 1, 2, 5] as const
 const panel = ref<HTMLElement | null>(null)
@@ -84,6 +85,7 @@ function toggleFlight() {
     <div class="voy-modes" role="group" :aria-label="pick('任务模式', 'Mission mode')">
       <button v-for="mode in modes" :key="mode" :data-mode="mode" :aria-pressed="ui.voyagerMode === mode"
         @click="atlas.setVoyagerMode(mode)">{{ missionName(mode, locale) }}</button>
+      <button id="newHorizonsOpen" @click="emit('open-new-horizons')">{{ pick('新视野号', 'New Horizons') }}</button>
     </div>
     <div v-if="ui.voyagerMode === 'both'" class="voy-compare" role="group" :aria-label="pick('跟踪探测器', 'Tracked spacecraft')">
       <button v-for="{ id, stats } in comparison" :key="id" :disabled="!stats" :aria-pressed="ui.voyagerFocus === id"
@@ -189,7 +191,10 @@ function toggleFlight() {
       </button>
 
       <div class="voy-slider-wrap">
-        <div class="voy-track-fill" :style="{ width: progressPct + '%' }"></div>
+        <div
+          class="voy-track-fill"
+          :style="{ transform: `scaleX(${Math.max(0, Math.min(1, progressPct / 100))})` }"
+        ></div>
         <div class="voy-ticks" aria-hidden="true">
           <span
             v-for="m in timelineEvents"

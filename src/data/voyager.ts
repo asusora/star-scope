@@ -1,7 +1,7 @@
 import * as T from 'three'
 import { createNeptunePass, neptuneEncounter } from './voyagerNeptune'
 import type { World, VoyagerStats, VoyagerView, VoyagerMode, VoyagerId } from '../scene/types'
-import { clamp, orbitalPosition, rad, v3 } from '../scene/math'
+import { clamp, orbitalPosition, orbitPoint, rad, v3 } from '../scene/math'
 import type { Locale } from '../i18n'
 import { pick } from '../i18n'
 
@@ -82,6 +82,7 @@ export const planetEphemeris: Record<string, PlanetEphemeris> = {
   Uranus: { au: 19.1913, L0: 313.232, wBar: 170.964, e: 0.0472, periodDays: 30688.5 },
   Neptune: { au: 30.069, L0: 304.88, wBar: 44.971, e: 0.0086, periodDays: 60195.0 },
   Pluto: { au: 39.482, L0: 238.929, wBar: 224.067, e: 0.2488, periodDays: 90560.0 },
+  Arrokoth: { au: 44.58, L0: 266.645, wBar: 333.4, e: 0.042, periodDays: 108700.0 },
 }
 
 export function planetTrueLonRad(id: string, year: number): number {
@@ -307,11 +308,19 @@ export function missionStart(mode: VoyagerMode) {
 }
 
 export function epochPlanetPosition(world: World, year: number, out: T.Vector3) {
-  if (world.id === 'Pluto') {
-    const el = planetEphemeris.Pluto
+  if (world.id === 'Pluto' || world.id === 'Arrokoth') {
+    const el = planetEphemeris[world.id]
     const daysFromJ2000 = (year - 2000) * 365.25
     const M = (el.L0 + (daysFromJ2000 * 360) / el.periodDays - el.wBar) * rad
-    return orbitalPosition(world.orbit, M, out)
+    // Solve true anomaly with the body's real eccentricity so scene longitude matches JPL ephemerides
+    // even when scene-space radial compression changes world.orbit.e.
+    let E = M
+    for (let i = 0; i < 4; i++) E -= (E - el.e * Math.sin(E) - M) / (1 - el.e * Math.cos(E))
+    const nu = 2 * Math.atan2(Math.sqrt(1 + el.e) * Math.sin(E / 2), Math.sqrt(1 - el.e) * Math.cos(E / 2))
+    const eScene = world.orbit.e
+    const EScene =
+      2 * Math.atan2(Math.sqrt(1 - eScene) * Math.sin(nu / 2), Math.sqrt(1 + eScene) * Math.cos(nu / 2))
+    return orbitPoint(world.orbit, EScene, out)
   }
   const lon = planetTrueLonRad(world.id, year)
   return orbitalPosition(world.orbit, lon - (world.node + (world.peri || 0)) * rad, out)

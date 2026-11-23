@@ -35,6 +35,27 @@ const profiles = {
       facts: [['Discovery', '23 July 1995'], ['Last perihelion', '1 April 1997'], ['Naked-eye visibility', 'About 18 months']],
     },
   },
+  'C/2014 UN271': {
+    source: 'https://science.nasa.gov/missions/hubble/hubble-confirms-largest-comet-nucleus-ever-seen/',
+    zh: {
+      body: '在暗能量巡天档案影像中发现的巨型外奥尔特云彗星。哈勃望远镜与 ALMA 毫米波观测确认其漆黑彗核直径约 119–137 千米，是人类已知最大的奥尔特云彗核。它在距太阳 20 AU 以外便因一氧化碳等极易挥发冰升华而显露彗发，预计 2031 年 1 月在土星轨道外侧（约 10.94 AU）过近日点，随后沿高倾角逆行轨道重返数万 AU 之外的外奥尔特云。',
+      facts: [
+        ['彗核直径', '约 119–137 公里（已知最大）'],
+        ['估算远日点', '约 40,000–55,000 AU（外奥尔特云）'],
+        ['预计近日点', '2031 年 1 月（约 10.94 AU）'],
+        ['发现来源', '2014 年暗能量巡天影像（2021 年确认）'],
+      ],
+    },
+    en: {
+      body: 'A giant outer Oort Cloud comet identified in Dark Energy Survey archival images. Hubble and ALMA measurements place its coal-dark nucleus at roughly 119–137 km across—the largest Oort Cloud comet nucleus ever measured. Already active beyond 20 AU from hypervolatile CO outgassing, it will reach perihelion just outside Saturn’s orbit (~10.94 AU) in January 2031 before returning tens of thousands of AU into the Outer Oort Cloud.',
+      facts: [
+        ['Nucleus diameter', 'About 119–137 km (largest known)'],
+        ['Estimated aphelion', '~40,000–55,000 AU (Outer Oort Cloud)'],
+        ['Expected perihelion', 'January 2031 (~10.94 AU)'],
+        ['Discovery', '2014 DES archive (identified 2021)'],
+      ],
+    },
+  },
 }
 
 export function cometProfile(comet: Comet, lang: Locale) {

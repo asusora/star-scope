@@ -416,6 +416,9 @@ const surfaceProfiles: Record<string, SurfaceProfile> = {
     rimColor: [0.88, 0.48, 0.38],
     rimStrength: 0.14,
   },
+  OF201: { ...icyMoonProfile, wrap: 0.01, rimStrength: 0, shininess: 32 },
+  Leleakuhonua: { ...defaultRockyProfile, specular: 0x231918, shininess: 16, regolith: 0.28 },
+  FE72: { ...defaultRockyProfile, regolith: 0.44 },
   Phobos: { ...defaultRockyProfile, bumpScale: 0.046, regolith: 0.45 },
   Deimos: { ...defaultRockyProfile, bumpScale: 0.04, regolith: 0.42 },
 }
@@ -546,10 +549,48 @@ export function createAtmosphereMesh(
   return mesh
 }
 
+function makeSolidTexture(rgba: [number, number, number, number], colorSpace: T.ColorSpace) {
+  const tex = new T.DataTexture(new Uint8Array(rgba), 1, 1, T.RGBAFormat)
+  tex.colorSpace = colorSpace
+  tex.wrapS = T.RepeatWrapping
+  tex.wrapT = T.ClampToEdgeWrapping
+  tex.magFilter = T.NearestFilter
+  tex.minFilter = T.NearestFilter
+  tex.needsUpdate = true
+  return tex
+}
+
+export const flatNormalPlaceholder = makeSolidTexture([128, 128, 255, 255], T.NoColorSpace)
+export const whiteSpecularPlaceholder = makeSolidTexture([255, 255, 255, 255], T.NoColorSpace)
+export const blackEmissivePlaceholder = makeSolidTexture([0, 0, 0, 255], T.SRGBColorSpace)
+
+function materialShaderSignature(m: T.MeshPhongMaterial) {
+  return (
+    (m.map ? 1 : 0) |
+    (m.bumpMap ? 2 : 0) |
+    (m.normalMap ? 4 : 0) |
+    (m.specularMap ? 8 : 0) |
+    (m.emissiveMap ? 16 : 0)
+  )
+}
+
+export function syncPlanetMaterial(m: T.MeshPhongMaterial) {
+  const sig = materialShaderSignature(m)
+  if (m.userData._shaderSig !== sig) {
+    m.userData._shaderSig = sig
+    m.needsUpdate = true
+  }
+}
+
 export function planetMaterial(
   id: string,
   map: T.Texture | null,
-  options?: { color?: number; cloudMap?: T.Texture | null },
+  options?: {
+    color?: number
+    cloudMap?: T.Texture | null
+    prebindNormal?: boolean
+    prebindSpecular?: boolean
+  },
 ) {
   const profile = surfaceProfiles[id] ?? defaultRockyProfile
   const isEarth = id === 'Earth'
@@ -563,24 +604,39 @@ export function planetMaterial(
     specular: profile.specular,
     shininess: profile.shininess,
   })
-  if (profile.bumpScale > 0 && map && !isEarth) {
-    material.bumpMap = map
-    material.bumpScale = profile.bumpScale
-  }
   if (isEarth) {
+    material.normalMap = flatNormalPlaceholder
+    material.specularMap = whiteSpecularPlaceholder
+    material.emissiveMap = blackEmissivePlaceholder
     material.normalScale.set(0.68, 0.68)
     material.emissive.set(0xffffff)
-  } else if (isIo) {
-    material.normalScale.set(0.88, 0.88)
-    material.emissive.set(0xffffff)
   } else {
-    material.normalScale.set(0.92, 0.92)
+    if (options?.prebindNormal) {
+      material.normalMap = flatNormalPlaceholder
+    } else if (profile.bumpScale > 0 && map) {
+      material.bumpMap = map
+      material.bumpScale = profile.bumpScale
+    }
+    if (options?.prebindSpecular) {
+      material.specularMap = whiteSpecularPlaceholder
+    }
+    if (isIo) {
+      material.emissiveMap = blackEmissivePlaceholder
+      material.normalScale.set(0.88, 0.88)
+      material.emissive.set(0xffffff)
+    } else {
+      material.normalScale.set(0.92, 0.92)
+    }
   }
 
   const cloudMapUniform: { value: T.Texture | null } = { value: options?.cloudMap ?? null }
   const cloudShiftUniform = { value: 0 }
-  if (wind) material.userData.cloudDrift = { value: 0 }
+  if (wind) {
+    material.userData.cloudDrift = { value: 0 }
+    material.userData.jetActive = { value: 0 }
+  }
   const hasCloudsUniform = { value: options?.cloudMap ? 1 : 0 }
+  const hasEmissiveMapUniform = { value: 0 }
   const saturnPoleUniform = { value: new T.Vector3(0, 1, 0) }
   const saturnRadiusUniform = { value: 1 }
   let saturnRingMat: T.MeshBasicMaterial | null = null
@@ -589,6 +645,9 @@ export function planetMaterial(
     material.userData.earthCloudMap = cloudMapUniform
     material.userData.earthCloudShift = cloudShiftUniform
     material.userData.earthHasClouds = hasCloudsUniform
+  }
+  if (isIo) {
+    material.userData.hasEmissiveMap = hasEmissiveMapUniform
   }
   if (isSaturn) {
     material.userData.bindSaturnShadow = (
@@ -603,15 +662,16 @@ export function planetMaterial(
   }
 
   const cacheTag = isEarth
-    ? 'planet-earth-v2'
+    ? 'planet-earth-v3'
     : isSaturn
-      ? 'planet-saturn-v2'
+      ? 'planet-saturn-v3'
       : isIo
-        ? 'planet-io-v2'
-        : 'planet-surface-v2'
+        ? 'planet-io-v3'
+        : wind
+          ? 'planet-wind-v3'
+          : 'planet-surface-v3'
 
   material.onBeforeCompile = (shader) => {
-    const closeClouds = material.userData.photoCloudDetail === true
     Object.assign(shader.uniforms, {
       uAmbientScale: { value: profile.ambientScale },
       uWrap: { value: profile.wrap },
@@ -630,6 +690,9 @@ export function planetMaterial(
         uCloudShift: cloudShiftUniform,
         uHasClouds: hasCloudsUniform,
       })
+    }
+    if (isIo) {
+      shader.uniforms.uHasEmissiveMap = hasEmissiveMapUniform
     }
     if (isSaturn) {
       Object.assign(shader.uniforms, {
@@ -703,7 +766,7 @@ export function planetMaterial(
       `
     }
     if (isIo) {
-      fDecl += `varying vec3 vObjPos;\n`
+      fDecl += `uniform float uHasEmissiveMap;\nvarying vec3 vObjPos;\n`
     }
     if (isSaturn) {
       fDecl += `
@@ -720,15 +783,20 @@ export function planetMaterial(
 
     let frag = fDecl + shader.fragmentShader
 
-    if (wind && closeClouds) {
+    if (wind) {
       shader.uniforms.uJetDrift = material.userData.cloudDrift
+      shader.uniforms.uJetActive = material.userData.jetActive
       shader.vertexShader = 'attribute float jetBand; varying float vJetBand;\n' +
         shader.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\nvJetBand = jetBand;')
-      frag = 'uniform float uJetDrift; varying float vJetBand;\n' + frag.replace(
+      frag = 'uniform float uJetDrift; uniform float uJetActive; varying float vJetBand;\n' + frag.replace(
         '#include <map_fragment>',
         `#ifdef USE_MAP
-          vec2 advected = vMapUv - vec2(sign(vJetBand) * uJetDrift, 0.0);
-          diffuseColor *= mix(texture2D(map, vMapUv), texture2D(map, advected), abs(vJetBand));
+          if (uJetActive > 0.5 && abs(vJetBand) > 0.001) {
+            vec2 advected = vMapUv - vec2(sign(vJetBand) * uJetDrift, 0.0);
+            diffuseColor *= mix(texture2D(map, vMapUv), texture2D(map, advected), abs(vJetBand));
+          } else {
+            diffuseColor *= texture2D(map, vMapUv);
+          }
         #endif`,
       )
     }
@@ -764,7 +832,7 @@ export function planetMaterial(
           #include <emissivemap_fragment>
           #if NUM_POINT_LIGHTS > 0
             float _ioNightMask = 1.0 - smoothstep(-0.22, 0.16, dot(normalize(pointLights[0].position + vViewPosition), nonPerturbedNormal));
-            totalEmissiveRadiance *= (0.28 + 1.45 * _ioNightMask) * vec3(1.45, 0.88, 0.55);
+            totalEmissiveRadiance *= uHasEmissiveMap * (0.28 + 1.45 * _ioNightMask) * vec3(1.45, 0.88, 0.55);
           #endif
         #else
           totalEmissiveRadiance = vec3(0.0);
@@ -801,15 +869,7 @@ export function planetMaterial(
           reflectedLight.directSpecular *= (0.48 + 1.38 * pow(1.0 - _mu, 3.0)) * vec3(1.06, 0.99, 0.9);
           #ifdef USE_MAP
             if (uHasClouds > 0.5 && _sunAngle > -0.05) {
-              ${closeClouds ? closeEarthShadow : `
-              vec3 _tanU = normalize(vec3(vObjPos.z, 0.0, -vObjPos.x) + vec3(1e-5, 0.0, 0.0));
-              vec3 _tanV = normalize(vec3(-vObjPos.x * vObjPos.y, 1.0 - vObjPos.y * vObjPos.y + 1e-4, -vObjPos.z * vObjPos.y));
-              float _du = dot(vObjSunDir, _tanU) * 0.0024 / max(0.28, length(vObjPos.xz));
-              float _dv = dot(vObjSunDir, _tanV) * 0.0042;
-              vec2 _shUv = vec2(fract(vMapUv.x - uCloudShift + _du), clamp(vMapUv.y + _dv, 0.001, 0.999));
-              float _shCloud = texture2D(uCloudMap, _shUv).r;
-              float _shFactor = 1.0 - 0.52 * _shCloud * smoothstep(-0.02, 0.24, _sunAngle);
-              `}
+              ${closeEarthShadow}
               reflectedLight.directDiffuse *= _shFactor;
               reflectedLight.directSpecular *= _shFactor * _shFactor;
             }
@@ -824,7 +884,7 @@ export function planetMaterial(
     const ioHotspots = isIo
       ? `
         #if NUM_POINT_LIGHTS > 0
-          #ifndef USE_EMISSIVEMAP
+          if (uHasEmissiveMap < 0.5) {
             float _ioNight = 1.0 - smoothstep(-0.18, 0.14, _sunAngle);
             if (_ioNight > 0.01) {
               float _h1 = pow(max(0.0, dot(vObjPos, normalize(vec3(0.74, 0.22, 0.63)))), 420.0);
@@ -834,7 +894,7 @@ export function planetMaterial(
               float _hot = _h1 * 1.1 + _h2 * 0.85 + _h3 * 0.75 + _h4 * 0.9;
               outgoingLight += vec3(1.35, 0.42, 0.08) * _hot * _ioNight;
             }
-          #endif
+          }
         #endif
       `
       : ''
@@ -880,8 +940,8 @@ export function planetMaterial(
     shader.fragmentShader = frag
   }
 
-  material.customProgramCacheKey = () =>
-    material.userData.photoCloudDetail ? `${cacheTag}-${id}-close-clouds` : cacheTag
+  material.userData._shaderSig = materialShaderSignature(material)
+  material.customProgramCacheKey = () => cacheTag
   return material
 }
 

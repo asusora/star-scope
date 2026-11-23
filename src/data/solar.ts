@@ -4,6 +4,15 @@ import { rad } from '../scene/math'
 
 const catalog: Record<string, MoonRecord[]> = rawCatalog
 
+export const INNER_OORT_START_AU = 2_000
+export const OUTER_OORT_START_AU = 20_000
+export const LIGHT_YEAR_AU = 63_241.077
+export const OUTER_OORT_CORE_AU = 100_000
+export const HILL_SPHERE_AU = 150_000
+export const PROXIMA_RA_DEG = 217.4289
+export const PROXIMA_DEC_DEG = -62.6795
+export const PROXIMA_DISTANCE_LY = 4.246
+
 export const declinations: Record<string, number> = {
   Mercury: 0.034,
   Venus: 177.36,
@@ -149,7 +158,6 @@ export function createSolarSystem() {
   const kuiperInner = neptune.a * (1 + neptune.e) + neptune.extent + 3
   const outerBand = { inner: kuiperInner, outer: kuiperInner + 56 }
   const scatteredBand = { inner: outerBand.outer, outer: outerBand.outer + 92 }
-  const oortBand = { inner: scatteredBand.outer, outer: scatteredBand.outer + 165 }
   const bandMid = (band: { inner: number; outer: number }) => (band.inner + band.outer) / 2
 
   const kuiperSlope = (outerBand.outer - outerBand.inner) / (50 - 30.07)
@@ -402,7 +410,7 @@ export function createSolarSystem() {
       prominent: true,
     },
 
-    // ── Scattered Disc & Detached / Inner Oort Zone (50–1000+ AU, Far Beyond Pluto!) ──
+    // Scattered disc and detached trans-Neptunian objects
     Gonggong: {
       a: 67.48,
       e: 0.503,
@@ -473,6 +481,34 @@ export function createSolarSystem() {
       summary: '极遥远的内奥尔特云矮行星，轨道近日点 76 AU、远日点直达 937 AU，公转一周逾 1.1 万年；表面经宇宙射线长年辐照呈深赤红色，韦布检出乙烷与乙炔等有机冰。',
       prominent: true,
     },
+    // JPL SBDB heliocentric osculating elements at JD 2461200.5 TDB (J2000 ecliptic).
+    OF201: {
+      a: 823.637167, e: 0.94518848, i: 16.22096, om: 328.76035, w: 337.83543, per: 8633807,
+      code: '2017 OF201',
+      kind: '海王星外天体 · 矮行星候选',
+      discovered: '2025 年公布',
+      source: sbdb + '2017%20OF201',
+      summary: '天文学家在跨越七年的望远镜影像中辨认出这颗天体。它在近日点进入柯伊伯带，远日点约为 1,600 AU。模型中的浅色盆地与裂纹为模拟地貌。',
+      prominent: true,
+    },
+    Leleakuhonua: {
+      a: 1344.905387, e: 0.95190532, i: 11.67887, om: 301.13443, w: 118.22936, per: 18015073,
+      code: '541132 · 2015 TG387',
+      kind: '类赛德娜分离天体',
+      discovered: '2015 年',
+      source: sbdb + '541132',
+      summary: '发现时距太阳约 80 AU。即使在近日点，它与太阳的距离仍约为 65 AU，轨道另一端则延伸至约 2,625 AU。模型中的棕红色山脊与沟槽为模拟地貌。',
+      prominent: true,
+    },
+    FE72: {
+      a: 2686.855990, e: 0.98658251, i: 20.60010, om: 336.74161, w: 134.03638, per: 50870383,
+      code: '2014 FE72',
+      kind: '极端海王星外天体',
+      discovered: '2014 年',
+      source: sbdb + '2014%20FE72',
+      summary: '这颗小天体沿极狭长的轨道绕太阳运行。近日点约 36 AU，估算远日点约 5,340 AU，不确定度约 500 AU。模型中的不规则轮廓与撞击坑为模拟地貌。',
+      prominent: true,
+    },
   }
 
   const smallSpecs: readonly [string, string, Belt, number, number][] = [
@@ -497,12 +533,15 @@ export function createSolarSystem() {
     ['Quaoar', '创神星', 'outer', 0.98, 159],
     ['Arrokoth', '阿罗科斯', 'outer', 0.56, 318],
     ['Makemake', '鸟神星', 'outer', 0.88, 318],
-    // Scattered Disc & Detached / Inner Oort Zone (50–1000+ AU)
+    // Scattered disc and detached objects, ordered by semi-major axis
     ['Gonggong', '共工星', 'scattered', 1.06, 122],
     ['Eris', '阋神星', 'scattered', 1.2, 235],
     ['Farfarout', '远极星', 'scattered', 0.72, 243],
     ['VP113', '2012 VP113', 'scattered', 0.78, 211],
     ['Sedna', '赛德娜', 'scattered', 1.04, 224],
+    ['OF201', '2017 OF201', 'scattered', 0.88, 308],
+    ['Leleakuhonua', 'Leleākūhonua', 'scattered', 0.72, 48],
+    ['FE72', '2014 FE72', 'scattered', 0.62, 198],
   ]
 
   const mainSlope = (mainBand.outer - mainBand.inner) / 1.45
@@ -572,6 +611,19 @@ export function createSolarSystem() {
   })
 
   const worlds = [...planets, ...smallBodies]
+  const allOrbitsOuter = Math.max(...smallBodies.map(p => p.a * (1 + p.e) + p.extent))
+  const oortBand = {
+    inner: scatteredBand.outer,
+    outer: Math.max(allOrbitsOuter, mapOuterAU(OUTER_OORT_START_AU)),
+  }
+  const outerOortBand = {
+    inner: mapOuterAU(OUTER_OORT_START_AU),
+    outer: mapOuterAU(HILL_SPHERE_AU),
+    thousandR: mapOuterAU(1_000),
+    tenThousandR: mapOuterAU(10_000),
+    lightYearR: mapOuterAU(LIGHT_YEAR_AU),
+    coreOuterR: mapOuterAU(OUTER_OORT_CORE_AU),
+  }
   return {
     planets,
     smallBodies,
@@ -581,7 +633,9 @@ export function createSolarSystem() {
     centaurBands,
     outerBand,
     scatteredBand,
+    allOrbitsOuter,
     oortBand,
+    outerOortBand,
     bandMid,
     mapOuterAU,
   }

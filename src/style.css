@@ -328,6 +328,44 @@ button:disabled {
   font-weight: 600;
 }
 
+.tag.oort-bound {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: rgba(162, 206, 248, 0.84);
+  letter-spacing: 0.055em;
+}
+
+.tag.oort-bound.ly {
+  color: rgba(132, 232, 255, 0.96);
+  font-weight: 600;
+  text-shadow:
+    0 1px 4px rgba(2, 6, 14, 0.96),
+    0 0 12px rgba(96, 212, 255, 0.42);
+}
+
+.tag.oort-proxima {
+  appearance: none;
+  border: 1px solid rgba(255, 188, 134, 0.34);
+  background: rgba(14, 18, 30, 0.72);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: #ffd4ad;
+  visibility: visible;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.tag.oort-proxima:hover,
+.tag.oort-proxima:focus-visible {
+  border-color: rgba(255, 204, 156, 0.78);
+  background: rgba(28, 32, 48, 0.88);
+  color: #fff0de;
+}
+
 /* Top-Left Sci-Fi Astrogation Telemetry Badge */
 #hudBrand {
   position: absolute;
@@ -431,7 +469,6 @@ button:disabled {
   border-radius: 6px;
   border: 1px solid rgba(70, 217, 255, 0.22);
   background: rgba(7, 17, 32, 0.55);
-  backdrop-filter: blur(8px);
 }
 
 .hud-meta {
@@ -450,7 +487,6 @@ button:disabled {
   border-radius: 7px;
   border: 1px solid rgba(114, 206, 255, 0.15);
   background: rgba(6, 13, 25, 0.56);
-  backdrop-filter: blur(10px);
 }
 
 .hud-chip.hud-state {
@@ -1924,6 +1960,7 @@ dialog a:hover {
 
 /* Voyager mission console & Rare Phenomena console */
 #voyagerHUD,
+#newHorizonsHUD,
 #phenomenaHUD {
   position: absolute;
   z-index: 5;
@@ -1949,6 +1986,7 @@ dialog a:hover {
 }
 
 #voyagerHUD::before,
+#newHorizonsHUD::before,
 #phenomenaHUD::before {
   content: '';
   position: absolute;
@@ -1965,6 +2003,7 @@ dialog a:hover {
 }
 
 .notes-open #voyagerHUD,
+.notes-open #newHorizonsHUD,
 .notes-open #phenomenaHUD {
   opacity: 0;
   pointer-events: none;
@@ -2006,6 +2045,7 @@ dialog a:hover {
 .voy-compare button[aria-pressed='true'] { border-color: currentColor; }
 .voy-compare .v1 b { color: var(--cyan-bright); }
 .voy-compare .v2 b, .tag.voyager-probe-tag.v2 { color: #98ffcd; }
+.tag.nh-probe-tag { color: #ffd486; }
 .voy-compare button:disabled { opacity: 0.55; }
 #voyagerHUD { max-height: calc(100dvh - 116px); overflow-y: auto; scrollbar-width: thin; }
 
@@ -2189,14 +2229,11 @@ dialog a:hover {
 .voy-track-fill {
   position: absolute;
   left: 0;
+  width: 100%;
   height: 3px;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--amber), var(--cyan), #9e8cff);
   pointer-events: none;
-}
-
-.phen-track-fill {
-  width: 100%;
   transform-origin: left center;
   will-change: transform;
 }
@@ -3249,6 +3286,7 @@ dialog h3 {
     width: min(920px, calc(100vw - 124px));
   }
   #voyagerHUD,
+  #newHorizonsHUD,
   #phenomenaHUD {
     width: min(410px, calc(100vw - 80px));
     bottom: 62px;
@@ -3334,6 +3372,7 @@ dialog h3 {
     display: none;
   }
   #voyagerHUD,
+  #newHorizonsHUD,
   #phenomenaHUD {
     left: 10px;
     bottom: 60px;
@@ -3512,7 +3551,7 @@ dialog h3 {
   }
 }
 
-@media (max-width: 385px) {
+@media (max-width: 430px) {
   .sky-tools {
     justify-content: space-between;
     gap: 4px;

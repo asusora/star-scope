@@ -8,6 +8,8 @@ export const comets = [
     i: 11.34077, node: 334.01348, peri: 187.28205, color: 0xe7b778 },
   { id: 'C/1995 O1', zh: '海尔–波普', startDeg: 334, en: 'Hale–Bopp', epoch: 2459837.5, a: 177.433384, e: 0.994981,
     i: 89.28759, node: 282.73342, peri: 130.41467, color: 0xa6abef },
+  { id: 'C/2014 UN271', zh: '伯纳迪内利–伯恩斯坦', startDeg: 358.75, en: 'Bernardinelli–Bernstein', epoch: 2459635.5,
+    a: 21286.0, e: 0.999486, i: 95.44, node: 190.01, peri: 326.28, color: 0x74c6ff },
 ] as const
 
 export type Comet = (typeof comets)[number]

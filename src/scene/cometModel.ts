@@ -6,7 +6,7 @@ import type { ScreenPoint } from './types'
 type Comet = (typeof comets)[number]
 type Project = (point: T.Vector3) => ScreenPoint | null
 
-const ORBIT_SAMPLES = 768
+const ORBIT_SAMPLES = 1024
 const TAIL_SEGMENTS_U = 42
 const PARTICLE_COUNT = 220
 
@@ -138,6 +138,40 @@ const VISUAL_PROFILES: Record<Comet['id'], CometVisualProfile> = {
       [-0.72, 0.38, 0.58],
       [0.24, -0.78, 0.58],
       [-0.22, 0.64, -0.74],
+    ],
+  },
+  'C/2014 UN271': {
+    seed: 2014271,
+    nucleusRadius: 1.08,
+    scaleXYZ: [1.22, 0.96, 1.02],
+    bilobed: 0.06,
+    craterCount: 15,
+    spinRate: 0.16,
+    spinTilt: [-0.46, 0.32],
+    activityKneeAU: 22.0,
+    activitySlope: 1.15,
+    spiralStrength: 0.22,
+    hasSodiumTail: false,
+    ionLengthMult: 1.16,
+    dustLengthMult: 1.04,
+    dustCurve: 0.62,
+    comaScale: 1.18,
+    comaCoreColor: [0.94, 0.98, 1.0],
+    comaInnerColor: [0.46, 0.80, 1.0],
+    comaOuterColor: [0.24, 0.48, 0.92],
+    ionNearColor: [0.58, 0.88, 1.0],
+    ionFarColor: [0.20, 0.44, 0.92],
+    dustNearColor: [0.92, 0.92, 0.96],
+    dustFarColor: [0.64, 0.72, 0.88],
+    wakeColor: [0.56, 0.82, 1.0],
+    crustDark: [26, 28, 34],
+    crustMid: [58, 62, 72],
+    iceTint: [176, 218, 248],
+    vents: [
+      [0.78, 0.42, 0.46],
+      [-0.68, 0.52, -0.52],
+      [0.26, -0.76, 0.59],
+      [-0.44, -0.34, 0.83],
     ],
   },
 }
@@ -797,19 +831,32 @@ function buildParticleGeometry(seed: number) {
 // High-resolution true-anomaly sampling (uniform dν = 360°/768 ≈ 0.47°) eliminates
 // perihelion polygonal kinks even at e = 0.995 (Hale-Bopp), and C1 Catmull-Rom
 // interpolation guarantees smooth velocity tangents with zero dust-tail jitter.
-function createCometTrajectory(comet: Comet, elements: Orbit, auToScene: (au: number) => number) {
+function createCometTrajectory(
+  comet: Comet,
+  elements: Orbit,
+  auToScene: (au: number) => number,
+  activityKneeAU: number,
+) {
   const N = ORBIT_SAMPLES
   const p = comet.a * (1 - comet.e * comet.e)
   const sqrtOneMinusE2 = Math.sqrt(1 - comet.e * comet.e)
+  // Intermediate anomaly parameter balances curve resolution smoothly at BOTH perihelion and aphelion,
+  // essential for ultra-eccentric Oort Cloud comets (e.g. e ≈ 0.9995).
+  const eMid = comet.e / (1 + sqrtOneMinusE2)
+  const sqrtOneMinusEMid2 = Math.sqrt(1 - eMid * eMid)
   const positions = new Float32Array(N * 3)
   const sunProx = new Float32Array(N)
   const points: T.Vector3[] = new Array(N)
+  const nus = new Float64Array(N + 1)
   const keplerFrac = new Float64Array(N + 1)
   const arcLen = new Float64Array(N + 1)
   const times = new Float64Array(N + 1)
 
   for (let i = 0; i < N; i++) {
-    const nu = (tau * i) / N
+    const t = (tau * i) / N
+    const nuRaw = i === 0 ? 0 : Math.atan2(sqrtOneMinusEMid2 * Math.sin(t), Math.cos(t) - eMid)
+    const nu = nuRaw < 0 ? nuRaw + tau : nuRaw
+    nus[i] = nu
     const cosNu = Math.cos(nu)
     const sinNu = Math.sin(nu)
     const denom = 1 + comet.e * cosNu
@@ -823,7 +870,7 @@ function createCometTrajectory(comet: Comet, elements: Orbit, auToScene: (au: nu
     positions[i * 3] = pt.x
     positions[i * 3 + 1] = pt.y
     positions[i * 3 + 2] = pt.z
-    sunProx[i] = 1 / (1 + (rAU / 3.8) ** 1.35)
+    sunProx[i] = 1 / (1 + (rAU / Math.max(3.8, activityKneeAU)) ** 1.35)
 
     // Convert true anomaly ν -> eccentric anomaly E -> mean anomaly fraction
     const cosE = (comet.e + cosNu) / denom
@@ -832,6 +879,7 @@ function createCometTrajectory(comet: Comet, elements: Orbit, auToScene: (au: nu
     if (E < 0) E += tau
     keplerFrac[i] = (E - comet.e * Math.sin(E)) / tau
   }
+  nus[N] = tau
   keplerFrac[N] = 1
 
   for (let i = 1; i <= N; i++) {
@@ -848,20 +896,30 @@ function createCometTrajectory(comet: Comet, elements: Orbit, auToScene: (au: nu
   const phases = new Float32Array(N)
   for (let i = 0; i < N; i++) phases[i] = times[i]
 
+  function phaseForNu(targetNu: number) {
+    const clampedNu = ((targetNu % tau) + tau) % tau
+    let lo = 0
+    let hi = N
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >>> 1
+      if (nus[mid] <= clampedNu) lo = mid
+      else hi = mid
+    }
+    const span = Math.max(1e-9, nus[hi] - nus[lo])
+    const frac = clamp((clampedNu - nus[lo]) / span, 0, 1)
+    return times[lo] + (times[hi] - times[lo]) * frac
+  }
+
   // Convert comet.startDeg (eccentric anomaly in degrees) to exact phase on our true-anomaly table
   const startE = (((comet.startDeg * Math.PI) / 180) % tau + tau) % tau
   const startNuRaw = Math.atan2(sqrtOneMinusE2 * Math.sin(startE), Math.cos(startE) - comet.e)
   const startNu = startNuRaw < 0 ? startNuRaw + tau : startNuRaw
-  const startIdxF = (startNu / tau) * N
-  const sLo = Math.floor(startIdxF) % N
-  const sFrac = startIdxF - Math.floor(startIdxF)
-  const startPhase = times[sLo] + (times[sLo + 1] - times[sLo]) * sFrac
+  const startPhase = phaseForNu(startNu)
 
   // Target phase for "Jump to Perihelion" (inbound ~65° before perihelion for a full slingshot fly-through)
-  const periLeadIdx = Math.round(((tau - 1.12) / tau) * N) % N
-  const periLeadPhase = times[periLeadIdx]
+  const periLeadPhase = phaseForNu(tau - 1.12)
 
-  const period = 48 * comet.a ** 0.28
+  const period = Math.min(340, 48 * comet.a ** 0.28)
 
   // Verify analytical orbitPoint consistency (keeps import meaningful for orbital reference)
   const perihelionPos = points[0].clone()
@@ -928,7 +986,7 @@ function createCometTrajectory(comet: Comet, elements: Orbit, auToScene: (au: nu
       )
       .normalize()
 
-    const nu = (tau * ((lo + f) % N)) / N
+    const nu = nus[lo] + (nus[hi] - nus[lo]) * f
     const rAU = p / (1 + comet.e * Math.cos(nu))
     // True heliocentric vis-viva orbital speed in km/s (Earth circular v0 = 29.7847 km/s)
     const speedKmS = 29.7847 * Math.sqrt(Math.max(0.0001, 2 / rAU - 1 / comet.a))
@@ -961,7 +1019,7 @@ export function createCometModel(
   webgl: boolean,
 ) {
   const profile = VISUAL_PROFILES[comet.id]
-  const trajectory = createCometTrajectory(comet, elements, auToScene)
+  const trajectory = createCometTrajectory(comet, elements, auToScene, profile.activityKneeAU)
 
   // 1. Dynamic Orbital Trajectory Group (Shader LineLoop + Perihelion Beacon)
   const orbitGroup = new T.Group()

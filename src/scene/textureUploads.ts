@@ -25,6 +25,7 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
   ) {
     const image = new Image()
     let pending: T.FramebufferTexture | null = null
+    let pendingSource: T.Texture | null = null
     let copyStrip: (() => void) | undefined
     function cancelUpload() {
       if (copyStrip) queue.delete(copyStrip)
@@ -33,6 +34,8 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
         cancelAnimationFrame(frame)
         frame = 0
       }
+      pendingSource?.dispose()
+      pendingSource = null
       pending?.dispose()
       pending = null
     }
@@ -74,14 +77,27 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
       strip.width = width
       strip.height = Math.min(height, Math.max(1, Math.floor(1024 * 1024 / width)))
       const source = new T.Texture(strip)
+      pendingSource = source
       const offset = new T.Vector2()
+      const unscaled = width === image.naturalWidth && height === image.naturalHeight
       let y = 0
       const copy = () => {
         const rows = Math.min(strip.height, height - y)
         if (strip.height !== rows) strip.height = rows
-        // Draw the same scaled image in each clipped strip, including its filter footprint.
         ctx.globalCompositeOperation = 'copy'
-        ctx.drawImage(image, 0, -y, width, height)
+        if (unscaled) {
+          ctx.drawImage(image, 0, y, width, rows, 0, 0, width, rows)
+        } else {
+          // Draw only the needed source slice with a small vertical filter margin to avoid seams.
+          const scaleY = image.naturalHeight / height
+          const pad = Math.ceil(scaleY * 2)
+          const sy = Math.max(0, Math.floor(y * scaleY) - pad)
+          const syEnd = Math.min(image.naturalHeight, Math.ceil((y + rows) * scaleY) + pad)
+          const sh = Math.max(1, syEnd - sy)
+          const dy = sy / scaleY - y
+          const dh = sh / scaleY
+          ctx.drawImage(image, 0, sy, image.naturalWidth, sh, 0, dy, width, dh)
+        }
         y += rows
         offset.y = height - y
         target.generateMipmaps = y === height
@@ -89,6 +105,8 @@ export function createTextureUploads(renderer: T.WebGLRenderer) {
         if (y === height) {
           queue.delete(copy)
           copyStrip = undefined
+          source.dispose()
+          pendingSource = null
           pending = null
           onReady(target)
         }

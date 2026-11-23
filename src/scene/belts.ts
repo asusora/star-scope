@@ -20,6 +20,7 @@ export interface BeltLayout {
   outerBand: BandRange
   scatteredBand: BandRange
   oortBand: BandRange
+  outerOortBand: BandRange
   jupiterA: number
   neptuneA: number
 }
@@ -467,8 +468,8 @@ function buildCustomBeltField(options: {
 }
 
 /**
- * Serene, gossamer 3D Inner Oort / Hills Cloud halo surrounding Sedna & 2012 VP113.
- * Transitions smoothly from a flared inner Hills disc (445..580) to a sparse 3D spherical comet shell (560..710).
+ * Serene, gossamer 3D Inner Oort / Hills Cloud halo surrounding Sedna, 2017 OF201, Leleākūhonua & 2014 FE72.
+ * Transitions smoothly from a flared toroidal Hills disc (~1,000–20,000 AU) toward the spherical Outer Oort Cloud.
  */
 function buildOortHalo(
   band: BandRange,
@@ -476,7 +477,7 @@ function buildOortHalo(
   webgl: boolean,
 ) {
   const rand = seeded(903771)
-  const count = 2600
+  const count = 2200
   const pos = new Float32Array(count * 3)
   const col = new Float32Array(count * 3)
   const orb = new Float32Array(count * 4)
@@ -484,16 +485,16 @@ function buildOortHalo(
   const sizeMul = new Float32Array(count)
 
   for (let i = 0; i < count; i++) {
-    const isOuterShell = rand() < 0.44
-    const t = isOuterShell ? 0.35 + rand() * 0.95 : Math.pow(rand(), 0.78) * 0.85
+    const isTransition = rand() < 0.36
+    const t = isTransition ? 0.32 + rand() * 0.72 : Math.pow(rand(), 0.82) * 0.88
     const r = band.inner + (band.outer - band.inner) * t
     const phase0 = rand() * tau
-    const omega = 0.00055 * Math.pow(band.inner / Math.max(1, r), 1.35)
+    const omega = 0.00052 * Math.pow(band.inner / Math.max(1, r), 1.35)
 
-    // Smooth vertical thickening from flared Hills disc into a gentle 3D spherical Oort shell
-    const latSpread = isOuterShell
-      ? (rand() * 2 - 1) * r * 0.62
-      : (rand() + rand() - 1) * r * (0.16 + 0.24 * t)
+    // Flared Hills disc thickening gently as radius approaches the 20,000 AU Outer Oort transition
+    const latSpread = isTransition
+      ? (rand() * 2 - 1) * r * (0.34 + 0.32 * t)
+      : (rand() + rand() - 1) * r * (0.15 + 0.28 * t)
     const yAmp = Math.abs(latSpread)
     const ip = rand() * tau
 
@@ -502,13 +503,12 @@ function buildOortHalo(
     pos[i3 + 1] = Math.sin(phase0 + ip) * yAmp
     pos[i3 + 2] = -Math.sin(phase0) * r
 
-    // Fade outer edge smoothly so the halo dissolves organically into deep space
-    const radialFade = Math.sin(Math.min(1, t / 1.3) * Math.PI * 0.9 + 0.1)
-    const shade = (0.26 + 0.56 * rand() ** 1.6) * (0.55 + 0.45 * radialFade)
-    const cool = rand() < 0.74
+    const radialFade = Math.sin(Math.min(1, t) * Math.PI * 0.85 + 0.12)
+    const shade = (0.25 + 0.54 * rand() ** 1.6) * (0.52 + 0.48 * radialFade)
+    const cool = rand() < 0.72
     col[i3] = shade * (cool ? 0.64 : 0.86)
     col[i3 + 1] = shade * (cool ? 0.78 : 0.74)
-    col[i3 + 2] = shade * (cool ? 1.0 : 0.82)
+    col[i3 + 2] = shade * (cool ? 1.0 : 0.84)
 
     const i4 = i * 4
     orb[i4] = r
@@ -516,7 +516,7 @@ function buildOortHalo(
     orb[i4 + 2] = phase0
     orb[i4 + 3] = omega
     incPhase[i] = ip
-    sizeMul[i] = 0.6 + rand() * 1.1
+    sizeMul[i] = 0.6 + rand() * 1.05
   }
 
   const geo = new T.BufferGeometry()
@@ -528,12 +528,153 @@ function buildOortHalo(
 
   const zeroOffset = { value: 0 }
   const mat = webgl
-    ? createBeltDustMaterial(clockUniform, zeroOffset, 1.75, 0.34, 48, 125, true)
+    ? createBeltDustMaterial(clockUniform, zeroOffset, 1.7, 0.32, 48, 125, true)
     : new T.PointsMaterial({
         size: 0.22,
         vertexColors: true,
         transparent: true,
-        opacity: 0.28,
+        opacity: 0.26,
+        depthWrite: false,
+      })
+
+  const points = new T.Points(geo, mat)
+  points.frustumCulled = false
+  const group = new T.Group()
+  group.add(points)
+  return { group, dustPoints: points }
+}
+
+/**
+ * True isotropic 3D spherical Outer Oort Cloud shell (20,000–150,000 AU, spanning 1 Light-Year
+ * out to the Solar Hill Sphere). Every icy comet body rotates gently on a randomized 3D great-circle
+ * orbit so the cloud stays uniformly spherical without polar bunching.
+ */
+function buildOuterOortShell(
+  band: BandRange,
+  clockUniform: { value: number },
+  webgl: boolean,
+) {
+  const rand = seeded(20142710)
+  const count = 3800
+  const pos = new Float32Array(count * 3)
+  const col = new Float32Array(count * 3)
+  const axis = new Float32Array(count * 4) // xyz = unit rotation axis, w = angular velocity
+  const sizeMul = new Float32Array(count)
+
+  for (let i = 0; i < count; i++) {
+    // Density peaks through the classic 20,000–100,000 AU shell and tapers organically toward the 150,000 AU Hill Sphere
+    const u = Math.pow(rand(), 0.72) * 0.96 + rand() * 0.06
+    const r = band.inner + (band.outer - band.inner) * Math.min(1.04, u)
+
+    // Uniform isotropic spherical direction (cos(theta) uniform in [-1, 1])
+    const z = rand() * 2 - 1
+    const phi = rand() * tau
+    const sinT = Math.sqrt(Math.max(0, 1 - z * z))
+    const px = Math.cos(phi) * sinT * r
+    const py = z * r
+    const pz = -Math.sin(phi) * sinT * r
+
+    const i3 = i * 3
+    pos[i3] = px
+    pos[i3 + 1] = py
+    pos[i3 + 2] = pz
+
+    // Random unit axis for ultra-slow isotropic 3D orbital drift
+    const az = rand() * 2 - 1
+    const ap = rand() * tau
+    const aSin = Math.sqrt(Math.max(0, 1 - az * az))
+    const omega = (0.00018 + rand() * 0.00024) * (rand() < 0.5 ? 1 : -1)
+    const i4 = i * 4
+    axis[i4] = Math.cos(ap) * aSin
+    axis[i4 + 1] = az
+    axis[i4 + 2] = Math.sin(ap) * aSin
+    axis[i4 + 3] = omega
+
+    // Radial envelope: softest at inner seam and dissolving gracefully at the Solar Hill Sphere
+    const env = Math.sin(Math.min(1, u) * Math.PI * 0.88 + 0.08)
+    const shade = (0.24 + 0.62 * rand() ** 1.55) * (0.48 + 0.52 * env)
+    const palette = rand()
+    if (palette < 0.62) {
+      // Glacial cyan-ice Oort comet tint
+      col[i3] = shade * 0.58
+      col[i3 + 1] = shade * 0.82
+      col[i3 + 2] = shade * 1.0
+    } else if (palette < 0.86) {
+      // Pearl frost-white
+      col[i3] = shade * 0.86
+      col[i3 + 1] = shade * 0.92
+      col[i3 + 2] = shade * 1.0
+    } else {
+      // Subtle deep-space lavender-blue
+      col[i3] = shade * 0.72
+      col[i3 + 1] = shade * 0.70
+      col[i3 + 2] = shade * 0.98
+    }
+    sizeMul[i] = 0.65 + rand() * 1.25
+  }
+
+  const geo = new T.BufferGeometry()
+  geo.setAttribute('position', new T.BufferAttribute(pos, 3))
+  geo.setAttribute('color', new T.BufferAttribute(col, 3))
+  geo.setAttribute('aAxis', new T.BufferAttribute(axis, 4))
+  geo.setAttribute('aSizeMul', new T.BufferAttribute(sizeMul, 1))
+
+  const mat = webgl
+    ? new T.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: T.AdditiveBlending,
+        uniforms: {
+          uBeltClock: clockUniform,
+          uOpacity: { value: 0.36 },
+        },
+        vertexShader: `
+          attribute vec3 color;
+          attribute vec4 aAxis;
+          attribute float aSizeMul;
+          uniform float uBeltClock;
+          varying vec3 vColor;
+          varying float vAlpha;
+          void main() {
+            float ang = uBeltClock * aAxis.w;
+            float cs = cos(ang);
+            float sn = sin(ang);
+            vec3 k = aAxis.xyz;
+            vec3 p = position * cs + cross(k, position) * sn + k * dot(k, position) * (1.0 - cs);
+            vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+            float dist = max(0.01, -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+            // Fade softly when camera is close to individual particles; blossom when viewing outer scales
+            float nearFade = smoothstep(95.0, 280.0, dist);
+            float camDist = length(cameraPosition);
+            float scaleBoost = mix(0.42, 1.0, smoothstep(520.0, 1400.0, camDist));
+            float ptSize = clamp(2.15 * aSizeMul * (480.0 / dist), 1.35, 5.4);
+            gl_PointSize = ptSize;
+            vColor = color;
+            vAlpha = nearFade * scaleBoost;
+          }
+        `,
+        fragmentShader: `
+          uniform float uOpacity;
+          varying vec3 vColor;
+          varying float vAlpha;
+          void main() {
+            vec2 p = gl_PointCoord * 2.0 - 1.0;
+            float r2 = dot(p, p);
+            if (r2 >= 1.0) discard;
+            float core = exp(-3.4 * r2);
+            float halo = exp(-1.5 * r2) * 0.42;
+            float alpha = (core + halo) * (1.0 - smoothstep(0.6, 1.0, r2)) * uOpacity * vAlpha;
+            if (alpha < 0.004) discard;
+            gl_FragColor = vec4(vColor, alpha);
+          }
+        `,
+      })
+    : new T.PointsMaterial({
+        size: 0.26,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.24,
         depthWrite: false,
       })
 
@@ -552,8 +693,17 @@ export function createAsteroidBelts(
   fallbackIceTex: T.Texture | null,
   queueSharedMaps: (spec: BodyDetailSpec, materials: T.MeshPhongMaterial[]) => void,
 ) {
-  const { mainBand, hildaBand, centaurBands, outerBand, scatteredBand, oortBand, jupiterA, neptuneA } =
-    layout
+  const {
+    mainBand,
+    hildaBand,
+    centaurBands,
+    outerBand,
+    scatteredBand,
+    oortBand,
+    outerOortBand,
+    jupiterA,
+    neptuneA,
+  } = layout
   const clockUniform = { value: 0 }
   const zeroAngle = { value: 0 }
   const jupiterAngle = { value: 0 }
@@ -983,8 +1133,9 @@ export function createAsteroidBelts(
     },
   })
 
-  // 7. Inner Oort / Hills Cloud Halo (120–1000+ AU compressed, embracing 2012 VP113 & Sedna!)
+  // 7. Inner Oort / Hills Cloud halo (2,000–20,000 AU) & Outer Oort Cloud spherical shell (20,000–150,000 AU)
   const oort = buildOortHalo(oortBand, clockUniform, webgl)
+  const outerOort = buildOuterOortShell(outerOortBand, clockUniform, webgl)
 
   scene.add(
     main.group,
@@ -995,6 +1146,7 @@ export function createAsteroidBelts(
     outer.group,
     scattered.group,
     oort.group,
+    outerOort.group,
   )
 
   for (const proto of prototypes) proto.dispose()
@@ -1011,6 +1163,7 @@ export function createAsteroidBelts(
     outer.group,
     scattered.group,
     oort.group,
+    outerOort.group,
   ]
 
   const frustum = new T.Frustum()
@@ -1033,6 +1186,8 @@ export function createAsteroidBelts(
     scatteredDust: scattered.dustPoints,
     oort: oort.group,
     oortDust: oort.dustPoints,
+    outerOort: outerOort.group,
+    outerOortDust: outerOort.dustPoints,
     setBeltsVisible(visible: boolean) {
       for (const g of allGroups) g.visible = visible
     },

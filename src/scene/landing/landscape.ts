@@ -13,9 +13,9 @@ export interface Landscape {
   seed: number
 }
 const sites: Record<string, [TerrainKind, string, Palette]> = {
-  Mars: ['dust', '风蚀台地', ['#a86643', '#dd9c6e', '#dfad86', '#846b67', '#fff0cc']],
+  Mars: ['dust', '杰泽罗层状台地', ['#a6633f', '#d89b6c', '#d8a378', '#685049', '#fff2dc']],
   Earth: ['alpine', '高山砾原', ['#716f4b', '#a0a78a', '#c1d5d8', '#356b9c', '#ffedc2']],
-  Moon: ['craters', '月海撞击坑', ['#858583', '#b2ada6', '#19191c', '#050609', '#fff9e2']],
+  Moon: ['craters', '静海撞击平原', ['#7e7d79', '#b8b4ac', '#000000', '#000000', '#fffaf0']],
   Mercury: ['craters', '撞击盆地', ['#766b62', '#b1a290', '#201e21', '#07070a', '#fff2ce']],
   Venus: ['lava', '玄武岩高地', ['#79502f', '#bd8b48', '#c89950', '#97703e', '#ffdd85']],
   Jupiter: ['cloud', '云带上空', ['#a27863', '#f6e2ba', '#e7c6a4', '#725f67', '#fff0cc']],
@@ -39,6 +39,9 @@ const sites: Record<string, [TerrainKind, string, Palette]> = {
   Farfarout: ['ice', '极远冰封荒原', ['#7c8596', '#c6d1e3', '#232938', '#060812', '#eef4ff']],
   VP113: ['ice', '粉霜冰丘', ['#9d8286', '#e0cdd0', '#2d2530', '#080712', '#fff2f4']],
   Sedna: ['ice', '奥尔特赤红冻原', ['#7d3226', '#cb735a', '#2c1516', '#07050c', '#ffe6d8']],
+  OF201: ['ice', '浅色裂隙盆地', ['#949499', '#e0ded8', '#282936', '#060710', '#eef1fa']],
+  Leleakuhonua: ['alpine', '棕红山脊', ['#815347', '#bd9280', '#2e2020', '#09060b', '#ffe9dd']],
+  FE72: ['craters', '阴影坑缘', ['#656369', '#ada8a6', '#222128', '#06060b', '#edebec']],
 }
 const icy: [TerrainKind, string, Palette] = [
   'ice',
@@ -82,6 +85,44 @@ export function rgb(hex: string) {
   return [(v >> 16) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]
 }
 export const sunDirection = [-0.51, 0.29, -0.81].map((v, _, a) => v / Math.hypot(...a))
+
+export function isRealisticSite(site: Landscape): boolean {
+  return site.id === 'Moon' || site.id === 'Mars'
+}
+
+export function landingSunDirection(site: Landscape): [number, number, number] {
+  if (site.id === 'Moon') {
+    // Low-angle cross-lighting (~15.5 deg) for dramatic crisp shadows AND a ~68% sunlit gibbous Earthrise!
+    const raw: [number, number, number] = [-0.78, 0.27, -0.56]
+    const len = Math.hypot(raw[0], raw[1], raw[2])
+    return [raw[0] / len, raw[1] / len, raw[2] / len]
+  }
+  if (site.id === 'Mars') {
+    // Low golden-hour Martian Sun (~13.8 deg) visible in upper-left sky with iconic blue-white Mie halo
+    const raw: [number, number, number] = [-0.26, 0.24, -0.935]
+    const len = Math.hypot(raw[0], raw[1], raw[2])
+    return [raw[0] / len, raw[1] / len, raw[2] / len]
+  }
+  return [sunDirection[0], sunDirection[1], sunDirection[2]]
+}
+
+export interface TerrainMeta {
+  /** Moon: bright ejecta / anorthosite exposure (0..1); Mars: bedrock/strata exposure (0..1) */
+  exposure: number
+  /** Crater rim proximity / rock clustering weight (0..1) */
+  rockCluster: number
+  /** Macro concavity / basin AO (0..1, 1 = open) */
+  ao: number
+  /** Mars ripple/dune intensity or Moon micro-regolith roughness (0..1) */
+  sand: number
+}
+
+function hash2D(ix: number, iz: number, seed: number): number {
+  let h = (Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(seed, 1442695041)) >>> 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
 export function createTerrain(site: Landscape) {
   const rand = seeded(site.seed)
   const table = Float32Array.from({ length: 65536 }, rand)
@@ -100,6 +141,19 @@ export function createTerrain(site: Landscape) {
       hi = table[b + i] + u * (table[b + j] - table[b + i])
     return lo + v * (hi - lo)
   }
+  function fbm(x: number, z: number, octaves = 4) {
+    let sum = 0
+    let amp = 0.5
+    let freq = 1
+    let norm = 0
+    for (let i = 0; i < octaves; i++) {
+      sum += amp * noise(x * freq, z * freq)
+      norm += amp
+      freq *= 2.04
+      amp *= 0.5
+    }
+    return sum / norm
+  }
   function crater(x: number, z: number, cell: number) {
     const cx = Math.floor(x / cell),
       cz = Math.floor(z / cell),
@@ -112,13 +166,255 @@ export function createTerrain(site: Landscape) {
     const d = Math.sqrt(d2)
     return r * (0.095 * Math.exp(-((d - 0.92) ** 2) / 0.014) - 0.27 * Math.max(0, 1 - d2) ** 1.8)
   }
+
+  // Multi-scale jittered Voronoi lunar crater layer (3x3 neighborhood prevents grid clipping).
+  function lunarCraterLayer(
+    x: number,
+    z: number,
+    cell: number,
+    density: number,
+    depthScale: number,
+    layerSeed: number,
+    outMeta?: { ejecta: number; rim: number; cavity: number },
+  ) {
+    const gx = Math.floor(x / cell)
+    const gz = Math.floor(z / cell)
+    let delta = 0
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cx = gx + dx
+        const cz = gz + dz
+        const p = hash2D(cx, cz, layerSeed)
+        if (p > density) continue
+        const ox = (cx + 0.16 + 0.68 * hash2D(cx, cz, layerSeed + 17)) * cell
+        const oz = (cz + 0.16 + 0.68 * hash2D(cx, cz, layerSeed + 31)) * cell
+        // Keep immediate landing pad gently clear of deep pits
+        if (cell < 90 && ox * ox + oz * oz < (cell * 0.42 + 6) ** 2) continue
+        const rNorm = 0.18 + 0.28 * hash2D(cx, cz, layerSeed + 53) ** 1.35
+        const r = rNorm * cell
+        const rx = x - ox
+        const rz = z - oz
+        const d2 = (rx * rx + rz * rz) / (r * r)
+        if (d2 > 2.8) continue
+        const d = Math.sqrt(d2)
+        // Fresh craters have sharper rims and brighter ejecta; older craters are softened.
+        const fresh = hash2D(cx, cz, layerSeed + 79)
+        const depth = r * depthScale * (0.14 + 0.11 * fresh)
+        const rimHeight = depth * (0.24 + 0.14 * fresh)
+        if (d < 1.0) {
+          // Parabolic bowl with subtly flattened floor for larger craters
+          const bowl = (1 - d2) ** (1.35 + 0.35 * fresh)
+          delta -= depth * bowl
+          // Inner wall transition to rim
+          const rim = Math.exp(-((d - 0.96) ** 2) / (0.016 + 0.024 * (1 - fresh)))
+          delta += rimHeight * rim
+          if (outMeta) {
+            outMeta.cavity = Math.max(outMeta.cavity, bowl * (0.45 + 0.55 * fresh))
+            outMeta.rim = Math.max(outMeta.rim, rim)
+            outMeta.ejecta = Math.max(outMeta.ejecta, rim * (0.35 + 0.65 * fresh))
+          }
+        } else {
+          // Raised rim decaying smoothly into surrounding ejecta apron
+          const rim = Math.exp(-((d - 0.96) ** 2) / (0.022 + 0.03 * (1 - fresh)))
+          const apron = Math.max(0, 1 - (d - 1.0) / 0.68) ** 2.2
+          delta += rimHeight * (0.68 * rim + 0.32 * apron)
+          if (outMeta) {
+            outMeta.rim = Math.max(outMeta.rim, rim * 0.9 + apron * 0.35)
+            outMeta.ejecta = Math.max(outMeta.ejecta, (rim * 0.75 + apron * 0.55) * (0.3 + 0.7 * fresh))
+          }
+        }
+      }
+    }
+    return delta
+  }
+
+  // Hero lunar craters placed for an iconic Apollo-style vista from the landing site.
+  const heroLunarCraters: [x: number, z: number, r: number, depth: number, fresh: number][] = [
+    [22, -74, 30, 5.4, 0.85],
+    [-46, -122, 42, 6.8, 0.55],
+    [76, -185, 58, 8.6, 0.72],
+    [-19, -24, 5.2, 0.92, 0.92],
+    [13, -17, 3.1, 0.52, 0.82],
+    [-125, -290, 96, 13.0, 0.45],
+  ]
+
+  // Asymmetric Martian layered mesas & eroded foothills inspired by Jezero Crater (Kodiak Butte) & Gale Crater
+  const marsButtes: [x: number, z: number, rx: number, rz: number, peak: number, angle: number][] = [
+    [-165, -340, 140, 82, 56, 0.28],
+    [220, -470, 165, 96, 68, -0.22],
+    [-340, -520, 185, 110, 78, 0.14],
+    [45, -690, 240, 115, 84, -0.08],
+    [-72, -210, 48, 28, 16.5, 0.46],
+    [135, -270, 62, 36, 22.0, -0.34],
+  ]
+
   const mesas = [
     [-130, -360, 102, 85, 53],
     [-222, -410, 64, 88, 38],
     [109, -410, 73, 83, 67],
     [193, -412, 46, 58, 45],
   ]
+
+  function moonEval(x: number, z: number, meta?: TerrainMeta) {
+    const out = meta ? { ejecta: 0, rim: 0, cavity: 0 } : undefined
+    // Broad mare rolling swells (gentle, never spiky alpine ridges)
+    const mareBase =
+      10.5 * (fbm(x * 0.0024 + 4.1, z * 0.0024 - 2.7, 3) - 0.5) +
+      3.4 * (fbm(x * 0.0095 - 1.3, z * 0.0095 + 3.4, 3) - 0.5) +
+      0.55 * (noise(x * 0.045, z * 0.045) - 0.5) +
+      0.11 * (noise(x * 0.18, z * 0.18) - 0.5)
+
+    // Distant smooth lunar highland massif / basin rim (Apolo 15/17 style rounded mountains on horizon)
+    const dist = Math.hypot(x, z)
+    const farBlend = clamp((dist - 190) / 720, 0, 1)
+    const farSmooth = farBlend * farBlend * (3 - 2 * farBlend)
+    const angle = Math.atan2(z, x)
+    const massifEnvelope =
+      0.52 +
+      0.34 * Math.sin(angle * 2.0 + 0.9) +
+      0.24 * Math.cos(angle * 3.0 - 0.4) +
+      0.18 * (fbm(x * 0.0012 + 12.0, z * 0.0012 - 8.0, 3) - 0.35)
+    const highlandWave = fbm(x * 0.0019 + 5.7, z * 0.0019 + 2.1, 4)
+    const roundedPeaks = Math.max(0, highlandWave - 0.28) ** 1.35 * 145
+    const distantMountains = farSmooth * Math.max(0, massifEnvelope) * roundedPeaks
+
+    // 4-tier overlapping multi-scale impact craters
+    let cratersY =
+      lunarCraterLayer(x, z, 340, 0.72, 0.92, site.seed + 101, out) +
+      lunarCraterLayer(x, z, 118, 0.68, 0.96, site.seed + 211, out) +
+      lunarCraterLayer(x, z, 36, 0.64, 0.98, site.seed + 307, out) +
+      lunarCraterLayer(x, z, 12, 0.55, 0.95, site.seed + 409, out)
+
+    // Hero craters in the landing vista
+    for (const [cx, cz, r, depth, fresh] of heroLunarCraters) {
+      const dx = x - cx
+      const dz = z - cz
+      const d2 = (dx * dx + dz * dz) / (r * r)
+      if (d2 > 2.9) continue
+      const d = Math.sqrt(d2)
+      const rimH = depth * (0.24 + 0.12 * fresh)
+      if (d < 1.0) {
+        const bowl = (1 - d2) ** (1.4 + 0.3 * fresh)
+        const rim = Math.exp(-((d - 0.96) ** 2) / 0.017)
+        cratersY += rimH * rim - depth * bowl
+        if (out) {
+          out.cavity = Math.max(out.cavity, bowl * 0.9)
+          out.rim = Math.max(out.rim, rim)
+          out.ejecta = Math.max(out.ejecta, rim * fresh)
+        }
+      } else {
+        const rim = Math.exp(-((d - 0.96) ** 2) / 0.026)
+        const apron = Math.max(0, 1 - (d - 1.0) / 0.72) ** 2.1
+        cratersY += rimH * (0.68 * rim + 0.32 * apron)
+        if (out) {
+          out.rim = Math.max(out.rim, rim * 0.95 + apron * 0.4)
+          out.ejecta = Math.max(out.ejecta, (rim * 0.8 + apron * 0.55) * fresh)
+        }
+      }
+    }
+
+    const y = mareBase + distantMountains + cratersY
+    if (meta && out) {
+      const highlandTint = clamp((y - 26) / 72, 0, 1) * 0.65
+      meta.exposure = clamp(out.ejecta * 0.85 + highlandTint, 0, 1)
+      meta.rockCluster = clamp(out.rim * 0.9 + farSmooth * 0.2, 0, 1)
+      meta.ao = clamp(1 - out.cavity * 0.42, 0.52, 1)
+      meta.sand = clamp(0.45 + 0.55 * noise(x * 0.032, z * 0.032), 0, 1)
+    }
+    return y
+  }
+
+  function marsEval(x: number, z: number, meta?: TerrainMeta) {
+    const nLarge = fbm(x * 0.0038 + 2.3, z * 0.0038 - 1.9, 4)
+    const nMed = fbm(x * 0.015 - 3.1, z * 0.015 + 4.2, 3)
+    const nFine = noise(x * 0.062, z * 0.062)
+
+    // Wide ancient lakebed / alluvial plain with gentle wind-carved swales
+    const dist = Math.hypot(x, z)
+    const swale = (fbm(x * 0.0075 + 6.1, z * 0.0055 - 3.4, 3) - 0.5) * 4.8
+    let y =
+      4.6 * (nLarge - 0.46) +
+      1.15 * (nMed - 0.5) +
+      0.18 * (nFine - 0.5) +
+      swale * clamp(dist / 65, 0, 1)
+
+    // Distant Martian crater rim mountains on the far horizon (low, rugged, multi-layered)
+    const rimSpread = clamp((dist - 290) / 880, 0, 1)
+    const rimSmooth = rimSpread * rimSpread * (3 - 2 * rimSpread)
+    const ridgeNoise = 1 - Math.abs(2 * fbm(x * 0.0017 + 0.22 * nMed, z * 0.0020 - 4.2, 4) - 1)
+    const craterRimWall = rimSmooth * (22 + 108 * ridgeNoise ** 1.75) * (0.42 + 0.58 * nLarge)
+    y += craterRimWall
+
+    // Rugged eroded Martian mesas & buttes with carved gullies, angular talus slopes, and smooth flat caprock
+    let butteExposure = 0
+    let talusCluster = 0
+    for (const [mx, mz, rx, rz, peak, ang] of marsButtes) {
+      const dx = x - mx
+      const dz = z - mz
+      const ca = Math.cos(ang)
+      const sa = Math.sin(ang)
+      const lx = (dx * ca - dz * sa) / rx
+      const lz = (dx * sa + dz * ca) / rz
+      const radial = Math.hypot(lx, lz)
+      if (radial > 2.35) continue
+      // Radial erosion gullies & rocky spurs so mesas look geologically fractured instead of rounded blobs
+      const az = Math.atan2(lz, lx)
+      const spur =
+        0.13 * Math.sin(az * 5.0 + mx * 0.03) +
+        0.08 * Math.cos(az * 9.0 - mz * 0.04) +
+        0.05 * Math.sin(az * 15.0 + nMed * 3.0)
+      const warp = 0.26 * (nLarge - 0.5) + 0.14 * (nMed - 0.5) + spur
+      const d = radial + warp
+      if (d < 1.95) {
+        // Broad scree/talus debris fan tapering smoothly into the basin plain
+        const apron = Math.max(0, 1 - d / 1.95) ** 2.1
+        // Rugged cliff wall rising to a flat wind-scoured caprock plateau
+        const wallRaw = clamp((1.05 - d) / 0.42, 0, 1)
+        const wallSmooth = wallRaw * wallRaw * (3 - 2 * wallRaw)
+        const gullyCarve = 1.0 - 0.14 * (1 - wallSmooth) * wallSmooth * 4.0 * Math.abs(Math.sin(az * 11.0 + nMed * 4.0))
+        y += peak * (0.74 * wallSmooth * gullyCarve + 0.26 * apron)
+        const onCliff = wallSmooth > 0.04 && wallSmooth < 0.96 ? 1 : 0
+        butteExposure = Math.max(butteExposure, onCliff * 0.95 + (wallSmooth >= 0.96 ? 0.52 : 0))
+        talusCluster = Math.max(talusCluster, apron * (1 - wallSmooth * 0.65))
+      }
+    }
+
+    // Eroded ancient shallow impact craters on the Martian basin floor
+    const oldCrater = lunarCraterLayer(x + 48, z - 31, 165, 0.42, 0.30, site.seed + 521)
+    y += oldCrater
+
+    // Subtle organic, patchy wind-drift sand beds (NO rigid parallel stripes!)
+    const driftPatch = clamp(1 - butteExposure * 1.5, 0, 1) * clamp((fbm(x * 0.022 + 1.5, z * 0.022 - 2.2, 2) - 0.36) * 2.4, 0, 1)
+    const warpX = x + 14.0 * (nMed - 0.5)
+    const warpZ = z + 14.0 * (fbm(x * 0.018 + 7.2, z * 0.018 - 4.1, 2) - 0.5)
+    const dunePhase = warpZ * 0.28 + warpX * 0.15
+    const dune = Math.sin(dunePhase) + 0.22 * Math.sin(dunePhase * 2.0 - 0.5)
+    y += 0.14 * dune * driftPatch
+
+    // Low fractured sedimentary bedrock benches protruding softly from basin regolith
+    const slabNoise = fbm(x * 0.036 + 8.4, z * 0.036 - 5.1, 2)
+    const bedrockOutcrop = clamp((slabNoise - 0.60) * 4.2, 0, 1) * (1 - driftPatch * 0.7)
+    y += bedrockOutcrop * 0.26
+
+    if (meta) {
+      meta.exposure = clamp(butteExposure + bedrockOutcrop * 0.78 + clamp((craterRimWall - 16) / 65, 0, 0.8), 0, 1)
+      meta.rockCluster = clamp(talusCluster * 0.95 + bedrockOutcrop * 0.8 + 0.26, 0, 1)
+      meta.ao = clamp(1 - Math.max(0, -oldCrater) * 0.06, 0.64, 1)
+      meta.sand = clamp(driftPatch, 0, 1)
+    }
+    return y
+  }
+
+  function sampleMeta(x: number, z: number): TerrainMeta {
+    const meta: TerrainMeta = { exposure: 0, rockCluster: 0.2, ao: 1, sand: 0 }
+    if (site.id === 'Moon') moonEval(x, z, meta)
+    else if (site.id === 'Mars') marsEval(x, z, meta)
+    return meta
+  }
+
   function height(x: number, z: number) {
+    if (site.id === 'Moon') return moonEval(x, z)
+    if (site.id === 'Mars') return marsEval(x, z)
     const n = noise(x * 0.011, z * 0.011),
       fine = noise(x * 0.054, z * 0.054)
     if (site.kind === 'cloud') {
@@ -171,6 +467,6 @@ export function createTerrain(site: Landscape) {
     if (site.kind === 'dust') y += 0.34 * Math.sin(z * 0.35 + n * 6) * fine
     return y
   }
-  return { noise, height }
+  return { noise, fbm, height, sampleMeta }
 }
 export type Terrain = ReturnType<typeof createTerrain>

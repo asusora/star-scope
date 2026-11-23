@@ -172,6 +172,24 @@ export const worldEn: Record<string, WorldEn> = {
     summary:
       'An extreme inner Oort cloud dwarf planet whose orbit spans 76 AU to 937 AU (~11,400-year period). Cosmic-ray irradiation gives it a deep crimson hue, with ethane and acetylene ices detected by JWST.',
   },
+  OF201: {
+    name: '2017 OF201',
+    kind: 'Trans-Neptunian Object · Dwarf Planet Candidate',
+    discovered: 'Announced in 2025',
+    summary: 'Astronomers identified this object in telescope images spanning seven years. It crosses the Kuiper belt near perihelion and reaches about 1,600 AU at aphelion. The pale basin and fractures in the model are illustrative.',
+  },
+  Leleakuhonua: {
+    name: 'Leleākūhonua',
+    kind: 'Sednoid',
+    discovered: '2015',
+    summary: 'Discovered about 80 AU from the Sun, this detached object stays about 65 AU away even at perihelion. Its orbit extends to about 2,625 AU. The russet ridges and grooves in the model are illustrative.',
+  },
+  FE72: {
+    name: '2014 FE72',
+    kind: 'Extreme Trans-Neptunian Object',
+    discovered: '2014',
+    summary: 'Its elongated orbit brings it within about 36 AU of the Sun. Its estimated aphelion is about 5,340 AU with an uncertainty of roughly 500 AU. The irregular silhouette and impact craters in the model are illustrative.',
+  },
 }
 
 export const upcomingMissionsEn: Record<string, string> = {
@@ -778,9 +796,9 @@ export function localizedProbePhoto(photo: ProbePhoto, lang: Locale = locale.val
 }
 
 export const landscapeRegionEn: Record<string, string> = {
-  Mars: 'Wind-Sculpted Mesa',
+  Mars: 'Jezero Layered Mesa',
   Earth: 'Alpine Scree',
-  Moon: 'Mare Crater Basin',
+  Moon: 'Mare Tranquillitatis',
   Mercury: 'Impact Basin',
   Venus: 'Basalt Highlands',
   Jupiter: 'Above the Cloud Belts',
@@ -804,12 +822,19 @@ export const landscapeRegionEn: Record<string, string> = {
   Farfarout: 'Distant Frozen Wastes',
   VP113: 'Pale Pink Frost Hills',
   Sedna: 'Oort Crimson Tundra',
+  OF201: 'Pale Fractured Basin',
+  Leleakuhonua: 'Russet Ridge Country',
+  FE72: 'Shadowed Crater Rims',
 }
 
 export const solarNotesEn: Record<Belt, { name: string; body: string }> = {
+  oort: {
+    name: 'Outer Oort Cloud & Solar Hill Sphere',
+    body: 'Beyond the flared Inner Oort / Hills disc (~2,000–20,000 AU), a vast spherical Outer Oort Cloud extends across 1 light-year (63,241 AU) out to the Sun’s ~150,000 AU gravitational Hill sphere. Giant comet C/2014 UN271 plunges inward from tens of thousands of AU, while the nearest star Proxima Centauri lies 4.24 light-years away toward the southern sky.',
+  },
   scattered: {
     name: 'Scattered Disc & Inner Oort',
-    body: 'Beyond 50 AU lies the high-inclination, eccentric scattered disc and detached inner Oort zone reaching hundreds to over a thousand AU—home to Gonggong, Eris, Farfarout (~132 AU), and deep-red Sedna (aphelion 937 AU).',
+    body: 'Beyond the Kuiper belt, some small bodies follow elongated orbits. Their estimated aphelia reach about 937 AU for Sedna, 1,600 AU for 2017 OF201, 2,625 AU for Leleākūhonua, and 5,340 AU for 2014 FE72.',
   },
   outer: {
     name: 'Kuiper Belt',

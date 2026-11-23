@@ -2,6 +2,7 @@ import { shallowReactive } from 'vue'
 import type { SceneUI } from './types'
 import { pick } from '../i18n'
 import { VOYAGER_END_YEAR, formatMissionDate } from '../data/voyager'
+import { NH_PLUTO_YEAR, createInitialNewHorizonsStats } from '../data/newHorizons'
 
 export function createSceneUI() {
   return shallowReactive<SceneUI>({
@@ -9,6 +10,11 @@ export function createSceneUI() {
     landing: null,
     galaxy: false,
     voyager: false,
+    newHorizons: false,
+    newHorizonsYear: NH_PLUTO_YEAR,
+    newHorizonsView: 'overview',
+    newHorizonsMilestone: 'pluto',
+    newHorizonsStats: createInitialNewHorizonsStats(),
     phenomena: false,
     phenomenonId: 'alignment1982',
     phenomenonYear: 1981.3,

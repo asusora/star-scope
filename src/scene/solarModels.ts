@@ -35,8 +35,11 @@ import {
   ringInner,
   ringOuter,
   shadeSaturn,
+  syncPlanetMaterial,
 } from './planetSurfaces'
 import {
+  cosmicSkyBakeFragment,
+  cosmicSkyBakeVertex,
   cosmicSkyFragment,
   cosmicSkyVertex,
   dynamicStarsFragment,
@@ -64,6 +67,7 @@ export function createSolarModels(
     outerBand,
     scatteredBand,
     oortBand,
+    outerOortBand,
   }: ReturnType<typeof createSolarSystem>,
   tag: (name: string, cls?: string) => HTMLSpanElement,
   requestDraw: () => void = () => {},
@@ -71,7 +75,12 @@ export function createSolarModels(
   const synthesis = createMapSynthesizer()
   const random = seeded(18474)
   const sphere = new T.SphereGeometry(1, 72, 48)
+  sphere.setAttribute('jetBand', new T.BufferAttribute(new Float32Array(sphere.attributes.uv.count), 1))
   const moonGeometry = new T.SphereGeometry(1, 64, 44)
+  moonGeometry.setAttribute(
+    'jetBand',
+    new T.BufferAttribute(new Float32Array(moonGeometry.attributes.uv.count), 1),
+  )
   const sculptedGeometries = new Map<string, T.BufferGeometry>()
   function geometryFor(id: string, fallback: T.BufferGeometry) {
     if (!hasCustomShape(id)) return fallback
@@ -122,7 +131,7 @@ export function createSolarModels(
         mat.normalScale.setScalar(spec.titanBands ? 0.25 : 0.92)
         if (maps.specular) mat.specularMap = maps.specular
         if (maps.emissive) mat.emissiveMap = maps.emissive
-        mat.needsUpdate = true
+        syncPlanetMaterial(mat)
       },
     })
   }
@@ -131,6 +140,41 @@ export function createSolarModels(
   const starPixelRatio = { value: 1 }
   const skyMapUniform: { value: T.Texture | null } = { value: textures.Sky }
   const hasSkyMapUniform = { value: 0 }
+  const nebulaMapUniform: { value: T.Texture | null } = { value: null }
+  const hasNebulaMapUniform = { value: 0 }
+  let nebulaRT: T.WebGLRenderTarget | null = null
+
+  function bakeCosmicSky(renderer: T.WebGLRenderer) {
+    if (!webgl || renderer.getContext().isContextLost()) return
+    nebulaRT?.dispose()
+    nebulaRT = new T.WebGLRenderTarget(1024, 512, {
+      minFilter: T.LinearFilter,
+      magFilter: T.LinearFilter,
+      depthBuffer: false,
+      stencilBuffer: false,
+    })
+    nebulaRT.texture.wrapS = T.RepeatWrapping
+    nebulaRT.texture.wrapT = T.ClampToEdgeWrapping
+    nebulaRT.texture.generateMipmaps = false
+    const bakeScene = new T.Scene()
+    const bakeCamera = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+    const bakeGeo = new T.PlaneGeometry(2, 2)
+    const bakeMat = new T.ShaderMaterial({
+      vertexShader: cosmicSkyBakeVertex,
+      fragmentShader: cosmicSkyBakeFragment,
+      depthTest: false,
+      depthWrite: false,
+    })
+    bakeScene.add(new T.Mesh(bakeGeo, bakeMat))
+    const prevTarget = renderer.getRenderTarget()
+    renderer.setRenderTarget(nebulaRT)
+    renderer.render(bakeScene, bakeCamera)
+    renderer.setRenderTarget(prevTarget)
+    bakeGeo.dispose()
+    bakeMat.dispose()
+    nebulaMapUniform.value = nebulaRT.texture
+    hasNebulaMapUniform.value = 1
+  }
 
   function createSunMaterial() {
     if (!webgl) {
@@ -153,12 +197,18 @@ export function createSolarModels(
       id !== 'Sun' &&
       isProceduralDetailBody(id) &&
       (!tex || id === 'Ceres' || id === 'Vesta' || id === 'Pallas' || id === 'Juno' || id === 'Hygiea')
+    const procSpec = needsProcMid ? getBodyDetailSpec(id) : null
     const material =
       id === 'Sun'
         ? createSunMaterial()
-        : planetMaterial(id, tex, id === 'Earth' ? { cloudMap: textures.Clouds } : undefined)
+        : planetMaterial(id, tex, {
+            cloudMap: id === 'Earth' ? textures.Clouds : undefined,
+            prebindNormal: needsProcMid,
+            prebindSpecular:
+              !!procSpec && (procSpec.baseGloss > 0.12 || (procSpec.iceGlossBoost ?? 0) > 0.2),
+          })
     if (needsProcMid && !tex && material instanceof T.MeshPhongMaterial) {
-      const [br, bg, bb] = getBodyDetailSpec(id).baseColor
+      const [br, bg, bb] = procSpec!.baseColor
       material.color.setRGB(br, bg, bb)
     }
     const mesh = new T.Mesh(geometryFor(id, sphere), material)
@@ -178,6 +228,7 @@ export function createSolarModels(
     centaur: 0x66a4ab,
     outer: 0x6b94b8,
     scattered: 0x8b86d0,
+    oort: 0x6cb8e6,
     moon: 0x7b98b2,
     focus: 0x67e4ff,
   }
@@ -276,18 +327,22 @@ export function createSolarModels(
       fragmentShader: cosmicSkyFragment,
       side: T.BackSide,
       transparent: opacity < 1,
+      depthTest: true,
       depthWrite: false,
+      depthFunc: T.LessEqualDepth,
       fog: false,
       uniforms: {
         uSkyMap: skyMapUniform,
         uHasSkyMap: hasSkyMapUniform,
+        uNebulaMap: nebulaMapUniform,
+        uHasNebulaMap: hasNebulaMapUniform,
         uTime: spaceTime,
         uOpacity: { value: opacity },
       },
     })
   }
   const skyDome = new T.Mesh(
-    new T.SphereGeometry(3800, 48, 32),
+    new T.SphereGeometry(8200, 48, 32),
     webgl
       ? createCosmicSkyMaterial(1)
       : new T.MeshBasicMaterial({
@@ -299,7 +354,10 @@ export function createSolarModels(
         }),
   )
   skyDome.rotation.set(0.4, 1.7, -0.47)
-  skyDome.renderOrder = -10
+  skyDome.frustumCulled = false
+  // Draw after opaque planets/sun (renderOrder 0) so Early-Z rejects occluded sky pixels,
+  // while remaining in the opaque queue before all transparent stars, rings, and atmospheres.
+  skyDome.renderOrder = webgl ? 1 : -10
   scene.add(skyDome)
 
   const starRandom = seeded(918273)
@@ -411,11 +469,11 @@ export function createSolarModels(
   }
 
   // Primary infinite celestial sphere (shared with galaxy & deep-sky views)
-  const stars = makeStarField(5200, 3200, 3200, 0.34)
+  const stars = makeStarField(5200, 7400, 7400, 0.34)
   scene.add(stars)
 
-  // World-space 3D parallax star shell around the solar system (well outside Sedna & Inner Oort Cloud)
-  const parallaxStars = makeStarField(950, 1150, 3100, 0.18)
+  // World-space 3D parallax star shell around the solar system (well outside the Outer Oort Cloud & Hill Sphere)
+  const parallaxStars = makeStarField(950, 1550, 4600, 0.18)
   scene.add(parallaxStars)
 
   // Occasional subtle deep-space shooting star ribbons on the distant celestial sphere
@@ -529,6 +587,7 @@ export function createSolarModels(
     kuiperDust,
     scatteredDust,
     oortDust,
+    outerOortDust,
     setBeltsVisible,
     updateBeltVisibility,
     stepBelts,
@@ -542,6 +601,7 @@ export function createSolarModels(
       outerBand,
       scatteredBand,
       oortBand,
+      outerOortBand,
       jupiterA: planets[4].a,
       neptuneA: planets[7].a,
     },
@@ -753,7 +813,14 @@ export function createSolarModels(
         const surface = moonSurfaces[m.name] || 'Rock'
         const color =
           surface === 'Rock' || surface === 'Icy' ? majorColors[m.name] || 0xe3e3e3 : 0xffffff
-        const mat = planetMaterial(m.name, textures[surface], { color })
+        const willProcMid = webgl && m.name !== 'Moon' && isProceduralDetailBody(m.name)
+        const moonSpec = willProcMid ? getBodyDetailSpec(m.name) : null
+        const mat = planetMaterial(m.name, textures[surface], {
+          color,
+          prebindNormal: willProcMid,
+          prebindSpecular:
+            !!moonSpec && (moonSpec.baseGloss > 0.12 || (moonSpec.iceGlossBoost ?? 0) > 0.2),
+        })
         const geo = geometryFor(m.name, moonGeometry)
         m.mesh = new T.Mesh(geo, mat)
         m.mesh.scale.setScalar(m.r)
@@ -767,7 +834,7 @@ export function createSolarModels(
           m.mesh.add(m.plume)
         }
         p.anchor.add(m.mesh)
-        if (webgl && m.name !== 'Moon' && isProceduralDetailBody(m.name)) {
+        if (willProcMid) {
           queueBodyMaps(m.name, m.mesh)
         }
       } else {
@@ -984,6 +1051,8 @@ export function createSolarModels(
     synthesis.dispose()
     cancelActiveMid?.()
     cancelActiveMid = null
+    nebulaRT?.dispose()
+    nebulaRT = null
     for (const tex of ownedRingTextures) tex.dispose()
     ownedRingTextures.length = 0
     for (const maps of ownedMidMaps) maps.dispose()
@@ -1006,10 +1075,12 @@ export function createSolarModels(
     kuiperDust,
     scatteredDust,
     oortDust,
+    outerOortDust,
     setBeltsVisible,
     updateBeltVisibility,
     skyDome,
     createCosmicSkyMaterial,
+    bakeCosmicSky,
     updateSpaceTime,
     setSkyTexture,
     sphere,
